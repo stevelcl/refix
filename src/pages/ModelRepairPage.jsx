@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { db } from "../firebase";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { listTutorials } from "../azure";
 import Breadcrumb from "../components/Breadcrumb";
 
 const ModelRepairPage = () => {
@@ -31,15 +30,7 @@ const ModelRepairPage = () => {
       try {
         // Fetch tutorials for this specific model
         const modelName = decodeURIComponent(model).replace(/-/g, " ");
-        const q = query(
-          collection(db, "tutorials"),
-          where("model", "==", modelName)
-        );
-        const snapshot = await getDocs(q);
-        const repairs = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
+        const repairs = await listTutorials({ model: modelName });
         
         // Group by repair type (extract from title)
         const types = repairs.map(r => ({

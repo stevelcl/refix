@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { db } from "../firebase";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { listTutorials } from "../azure";
 import Breadcrumb from "../components/Breadcrumb";
 
 const LaptopBrandPage = () => {
@@ -13,12 +12,7 @@ const LaptopBrandPage = () => {
     const fetchModels = async () => {
       try {
         // Fetch unique models from tutorials for this brand
-        const q = query(
-          collection(db, "tutorials"),
-          where("category", "==", "Laptops")
-        );
-        const snapshot = await getDocs(q);
-        const allTutorials = snapshot.docs.map(doc => doc.data());
+        const allTutorials = await listTutorials({ category: "Laptops" });
         
         // Filter by brand (assuming model names contain brand)
         const brandModels = [...new Set(

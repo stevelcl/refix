@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { db } from "../firebase";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { listTutorials } from "../azure";
 import Breadcrumb from "../components/Breadcrumb";
 
 const AndroidPhonePage = () => {
@@ -11,12 +10,8 @@ const AndroidPhonePage = () => {
   useEffect(() => {
     const fetchAndroidModels = async () => {
       try {
-        const q = query(
-          collection(db, "tutorials"),
-          where("category", "==", "Phones")
-        );
-        const snapshot = await getDocs(q);
-        const allModels = snapshot.docs.map(doc => doc.data().model).filter(Boolean);
+        const tutorials = await listTutorials({ category: "Phones" });
+        const allModels = (tutorials || []).map(t => t.model).filter(Boolean);
         const androidModels = [...new Set(
           allModels.filter(model => 
             !model.toLowerCase().includes("iphone") && 

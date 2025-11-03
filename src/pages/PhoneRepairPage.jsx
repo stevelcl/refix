@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { db } from "../firebase";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { listTutorials } from "../azure";
 import Breadcrumb from "../components/Breadcrumb";
 
 const PhoneRepairPage = ({ showAndroid = false }) => {
@@ -12,14 +11,10 @@ const PhoneRepairPage = ({ showAndroid = false }) => {
     if (showAndroid) {
       const fetchAndroidModels = async () => {
         try {
-          const q = query(
-            collection(db, "tutorials"),
-            where("category", "==", "Phones")
-          );
-          const snapshot = await getDocs(q);
+          const tutorials = await listTutorials({ category: "Phones" });
           const models = [...new Set(
-            snapshot.docs
-              .map(doc => doc.data().model)
+            (tutorials || [])
+              .map(t => t.model)
               .filter(model => model && !model.toLowerCase().includes("iphone") && !model.toLowerCase().includes("apple"))
           )];
           setAndroidModels(models.length > 0 ? models : ["Samsung Galaxy", "Google Pixel", "OnePlus"]);

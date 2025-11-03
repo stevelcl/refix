@@ -1,6 +1,5 @@
 import React, { useState } from "react";
-import { db } from "../firebase";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { createFeedback } from "../azure";
 
 const FeedbackPage = () => {
   const [form, setForm] = useState({ name: "", request: "", comments: "" });
@@ -15,11 +14,10 @@ const FeedbackPage = () => {
   const handleSubmit = async e => {
     e.preventDefault();
     setLoading(true);
-    await addDoc(collection(db, "feedback"), {
+    await createFeedback({
       name: form.name,
       request: form.request,
       comments: form.comments,
-      timestamp: serverTimestamp()
     });
     setLoading(false);
     setForm({ name: "", request: "", comments: "" });

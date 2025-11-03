@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { db } from "../firebase";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { listTutorials } from "../azure";
 import TutorialCard from "../components/TutorialCard";
 import SearchBar from "../components/SearchBar";
 
@@ -41,20 +40,8 @@ const TutorialsPage = () => {
   useEffect(() => {
     async function fetchGuides() {
       setLoading(true);
-      let q = collection(db, "tutorials");
-      let filters = [];
-      if (category !== "All") filters.push(where("category", "==", category));
-      if (model) filters.push(where("model", "==", model));
-      if (filters.length > 0) q = query(q, ...filters);
-      const snapshot = await getDocs(q);
-      let items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      if (search) {
-        items = items.filter(g =>
-          (g.title?.toLowerCase() || "").includes(search.toLowerCase()) ||
-          (g.model?.toLowerCase() || "").includes(search.toLowerCase())
-        );
-      }
-      setGuides(items);
+      const items = await listTutorials({ category, model, search });
+      setGuides(items || []);
       setLoading(false);
     }
     fetchGuides();
@@ -107,5 +94,4 @@ const TutorialsPage = () => {
 };
 
 export default TutorialsPage;
-
 

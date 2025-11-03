@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { db } from "../firebase";
-import { collection, addDoc, getDocs, updateDoc, doc, serverTimestamp } from "firebase/firestore";
+import { listTutorials, createTutorial, updateTutorial } from "../azure";
 import { useSite } from "../context/SiteContext";
 import CreatorDashboardForm from "../components/CreatorDashboardForm";
 import CreatorGuideTable from "../components/CreatorGuideTable";
@@ -14,8 +13,8 @@ const CreatorDashboardPage = () => {
   const [message, setMessage] = useState("");
 
   const fetchGuides = useCallback(async () => {
-    const docsSnap = await getDocs(collection(db, "tutorials"));
-    setAllGuides(docsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    const items = await listTutorials();
+    setAllGuides(items || []);
   }, []);
 
   useEffect(() => { if (isCreatorAuthed) fetchGuides(); }, [isCreatorAuthed, fetchGuides]);
@@ -30,17 +29,10 @@ const CreatorDashboardPage = () => {
   const handleSubmit = async (data) => {
     setLoading(true);
     if (editingGuide) {
-      const docRef = doc(db, "tutorials", editingGuide.id);
-      await updateDoc(docRef, {
-        ...data,
-        updatedAt: serverTimestamp()
-      });
+      await updateTutorial(editingGuide.id, data);
       setMessage("Guide updated.");
     } else {
-      await addDoc(collection(db, "tutorials"), {
-        ...data,
-        createdAt: serverTimestamp()
-      });
+      await createTutorial(data);
       setMessage("Guide published.");
     }
     setEditingGuide(null);

@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { db } from "../firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { getTutorial } from "../azure";
 import TutorialStepList from "../components/TutorialStepList";
 import Breadcrumb from "../components/Breadcrumb";
 
@@ -18,9 +17,8 @@ const TutorialDetailPage = () => {
 
   useEffect(() => {
     const fetchGuide = async () => {
-      const ref = doc(db, "tutorials", id);
-      const snap = await getDoc(ref);
-      if (snap.exists()) setData({ id: snap.id, ...snap.data() });
+      const item = await getTutorial(id);
+      if (item) setData(item);
     };
     fetchGuide();
   }, [id]);
