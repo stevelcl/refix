@@ -1,9 +1,7 @@
 // Azure integration helpers for the React app
-// - Blob uploads via SAS (client-side)
+// - Blob uploads via SAS (client-side) using plain fetch (no SDK)
 // - Data operations via a backend API that talks to Cosmos DB
 //   Configure env vars in Vite: VITE_BLOB_CONTAINER_SAS_URL and VITE_API_BASE
-
-import { ContainerClient } from "@azure/storage-blob";
 
 const containerSasUrl = import.meta.env.VITE_BLOB_CONTAINER_SAS_URL;
 const apiBase = import.meta.env.VITE_API_BASE;
@@ -16,17 +14,31 @@ function ensure(value, name) {
 // Upload an image file to Azure Blob Storage using a container SAS URL
 export async function uploadImageToBlob(file, pathPrefix = "tutorials") {
   ensure(containerSasUrl, "VITE_BLOB_CONTAINER_SAS_URL");
-  const containerClient = new ContainerClient(containerSasUrl);
   const ext = (file?.name || "").split(".").pop() || "bin";
   const safeExt = ext.toLowerCase().replace(/[^a-z0-9]/g, "");
-  const blobName = `${pathPrefix}/${Date.now()}-${Math.random()
-    .toString(36)
-    .slice(2)}.${safeExt}`;
-  const blockBlobClient = containerClient.getBlockBlobClient(blobName);
-  await blockBlobClient.uploadData(file, {
-    blobHTTPHeaders: { blobContentType: file.type || "application/octet-stream" },
+  const blobName = `${pathPrefix}/${Date.now()}-${Math.random().toString(36).slice(2)}.${safeExt}`;
+
+  // Build blob URL from container SAS URL
+  const u = new URL(containerSasUrl);
+  const base = `${u.origin}${u.pathname}`; // .../container
+  const sas = u.search; // ?sv=...
+  const blobUrlWithSas = `${base.replace(/\/$/, "")}/${blobName}${sas}`;
+
+  const res = await fetch(blobUrlWithSas, {
+    method: "PUT",
+    headers: {
+      "x-ms-blob-type": "BlockBlob",
+      "x-ms-version": "2020-10-02",
+      "Content-Type": file.type || "application/octet-stream",
+    },
+    body: file,
   });
-  return blockBlobClient.url;
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Blob upload failed: ${res.status} ${text}`);
+  }
+  // Return URL (may require SAS to read unless container has public access)
+  return blobUrlWithSas;
 }
 
 // --- Cosmos DB (via backend API) ---
@@ -75,4 +87,3 @@ export async function updateTutorial(id, data) {
 export async function createFeedback(data) {
   return api(`/feedback`, { method: "POST", body: JSON.stringify(data) });
 }
-
