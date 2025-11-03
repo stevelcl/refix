@@ -1,0 +1,13 @@
+{
+  // Silence VS Code’s CSS validator complaining about Tailwind at‑rules
+  "css.lint.unknownAtRules": "ignore",
+  "scss.lint.unknownAtRules": "ignore",
+  "less.lint.unknownAtRules": "ignore",
+
+  // Optional: better IntelliSense if you have the Tailwind extension
+  // Associate this file with the Tailwind language mode only for index.css
+  "files.associations": {
+    "src/index.css": "tailwindcss"
+  }
+}
+
