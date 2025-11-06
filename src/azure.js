@@ -45,20 +45,144 @@ export async function uploadImageToBlob(file, pathPrefix = "tutorials") {
 // The frontend calls a backend (e.g., Azure Functions) that performs
 // authenticated Cosmos DB operations. This avoids exposing keys client-side.
 
+// Get authentication token from localStorage
+function getAuthToken() {
+  return localStorage.getItem("authToken");
+}
+
+// API helper with automatic authentication
 async function api(path, options = {}) {
+  // Provide helpful error message if VITE_API_BASE is not configured
+  if (!apiBase) {
+    const errorMsg = 
+      "VITE_API_BASE is not configured. " +
+      "Please create a .env file in the project root with: " +
+      "VITE_API_BASE=http://localhost:3000/api (or your backend URL). " +
+      "See ENV_CONFIG.md for detailed instructions.";
+    console.error(errorMsg);
+    throw new Error(errorMsg);
+  }
+  
   ensure(apiBase, "VITE_API_BASE");
+  const token = getAuthToken();
+  
+  const headers = {
+    "Content-Type": "application/json",
+    ...(options.headers || {}),
+  };
+  
+  // Add authentication token if available
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  
   const res = await fetch(`${apiBase}${path}`, {
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
     ...options,
+    headers,
   });
+  
+  // Handle 401 Unauthorized - token expired or invalid
+  if (res.status === 401) {
+    localStorage.removeItem("authToken");
+    throw new Error("Authentication expired. Please login again.");
+  }
+  
+  // Handle 403 Forbidden - insufficient permissions
+  if (res.status === 403) {
+    throw new Error("You don't have permission to perform this action.");
+  }
+  
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`API ${path} failed: ${res.status} ${text}`);
   }
+  
   // Some endpoints might return 204
   const ct = res.headers.get("content-type") || "";
   return ct.includes("application/json") ? res.json() : null;
 }
+
+// --- Authentication APIs ---
+export async function login(username, password) {
+  // Provide helpful error message if VITE_API_BASE is not configured
+  if (!apiBase) {
+    const errorMsg = 
+      "VITE_API_BASE is not configured. " +
+      "Please create a .env file in the project root with: " +
+      "VITE_API_BASE=http://localhost:3000/api (or your backend URL). " +
+      "See ENV_CONFIG.md for detailed instructions.";
+    console.error(errorMsg);
+    throw new Error(errorMsg);
+  }
+  
+  ensure(apiBase, "VITE_API_BASE");
+  
+  try {
+    const res = await fetch(`${apiBase}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`Login failed: ${res.status} ${text}`);
+    }
+    
+    return res.json();
+  } catch (error) {
+    // Provide more helpful error messages for common issues
+    if (error.name === "TypeError" && error.message.includes("fetch")) {
+      const apiUrl = `${apiBase}/auth/login`;
+      throw new Error(
+        `Failed to connect to backend server at ${apiUrl}. ` +
+        `Please check:\n` +
+        `1. Is your backend server running?\n` +
+        `2. Is the URL correct in .env file? (Current: ${apiBase})\n` +
+        `3. Check browser console Network tab for detailed error\n` +
+        `4. Verify CORS settings on your backend server`
+      );
+    }
+    throw error;
+  }
+}
+
+export async function logout() {
+  const token = getAuthToken();
+  if (!token) return;
+  
+  try {
+    await api(`/auth/logout`, { method: "POST" });
+  } catch (error) {
+    // Even if API fails, clear local token
+    console.error("Logout API error:", error);
+  }
+}
+
+export async function getCurrentUser() {
+  return api(`/auth/me`);
+}
+
+// --- Public User Registration API (for regular users only) ---
+// Regular users can register, but they will automatically be assigned "user" role
+// This endpoint is NOT for admin registration - admin account must be manually created in database
+export async function registerUser(username, password, email) {
+  ensure(apiBase, "VITE_API_BASE");
+  const res = await fetch(`${apiBase}/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password, email }),
+  });
+  
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Registration failed: ${res.status} ${text}`);
+  }
+  
+  return res.json();
+}
+
+// --- Public APIs (no authentication required) ---
 
 export async function listTutorials({ category, model, search } = {}) {
   const params = new URLSearchParams();
@@ -73,17 +197,42 @@ export async function getTutorial(id) {
   return api(`/tutorials/${encodeURIComponent(id)}`);
 }
 
+export async function createFeedback(data) {
+  return api(`/feedback`, { method: "POST", body: JSON.stringify(data) });
+}
+
+// --- Admin APIs (require authentication and admin role) ---
+// These endpoints are protected by the backend API which checks for admin role
 export async function createTutorial(data) {
-  return api(`/tutorials`, { method: "POST", body: JSON.stringify(data) });
+  return api(`/admin/tutorials`, { method: "POST", body: JSON.stringify(data) });
 }
 
 export async function updateTutorial(id, data) {
-  return api(`/tutorials/${encodeURIComponent(id)}`, {
+  return api(`/admin/tutorials/${encodeURIComponent(id)}`, {
     method: "PUT",
     body: JSON.stringify(data),
   });
 }
 
-export async function createFeedback(data) {
-  return api(`/feedback`, { method: "POST", body: JSON.stringify(data) });
+export async function deleteTutorial(id) {
+  return api(`/admin/tutorials/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
+// Category Management APIs (admin only)
+export async function getCategories() {
+  // Public read access
+  return api(`/categories`);
+}
+
+export async function createCategory(data) {
+  return api(`/admin/categories`, { method: "POST", body: JSON.stringify(data) });
+}
+
+export async function updateCategories(categories) {
+  return api(`/admin/categories`, {
+    method: "PUT",
+    body: JSON.stringify(categories),
+  });
 }
