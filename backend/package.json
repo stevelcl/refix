@@ -8,6 +8,7 @@
     "dev": "nodemon server.js"
   },
   "dependencies": {
+  "@azure/cosmos": "*",
     "express": "^4.18.2",
     "cors": "^2.8.5",
     "bcrypt": "^5.1.1",

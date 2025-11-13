@@ -15,12 +15,8 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// In-memory database (replace with actual Cosmos DB connection)
-// In production, connect to Azure Cosmos DB
-const users = [];
-const tutorials = [];
-const categories = [];
-const feedback = [];
+// Storage abstraction (will use Cosmos DB if configured, otherwise local JSON file)
+const db = require('./db');
 
 // Helper: Generate JWT token
 function generateToken(user) {
@@ -32,7 +28,7 @@ function generateToken(user) {
 }
 
 // Helper: Authenticate middleware
-function authenticate(req, res, next) {
+async function authenticate(req, res, next) {
   const token = req.headers.authorization?.replace('Bearer ', '');
   if (!token) {
     return res.status(401).json({ error: 'Authentication required' });
@@ -40,7 +36,7 @@ function authenticate(req, res, next) {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    const user = users.find(u => u.id === decoded.userId);
+    const user = await db.getUserById(decoded.userId);
     if (!user) {
       return res.status(401).json({ error: 'Invalid token' });
     }
@@ -73,7 +69,7 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Username and password are required' });
     }
 
-    const user = users.find(u => u.username === username);
+    const user = await db.getUserByUsername(username);
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
@@ -124,7 +120,7 @@ app.post('/api/auth/register', async (req, res) => {
     }
 
     // Check if username already exists
-    if (users.find(u => u.username === username)) {
+    if (await db.getUserByUsername(username)) {
       return res.status(409).json({ error: 'Username already exists' });
     }
 
@@ -142,7 +138,7 @@ app.post('/api/auth/register', async (req, res) => {
       updatedAt: new Date().toISOString()
     };
 
-    users.push(newUser);
+  await db.createUser(newUser);
 
     res.status(201).json({
       id: newUser.id,
@@ -159,29 +155,11 @@ app.post('/api/auth/register', async (req, res) => {
 // ==================== PUBLIC API ENDPOINTS ====================
 
 // GET /api/tutorials
-app.get('/api/tutorials', (req, res) => {
+app.get('/api/tutorials', async (req, res) => {
   try {
-    let filtered = [...tutorials];
-    
     const { category, model, search } = req.query;
-    
-    if (category && category !== 'All') {
-      filtered = filtered.filter(t => t.category === category);
-    }
-    
-    if (model) {
-      filtered = filtered.filter(t => t.model === model);
-    }
-    
-    if (search) {
-      const searchLower = search.toLowerCase();
-      filtered = filtered.filter(t => 
-        t.title.toLowerCase().includes(searchLower) ||
-        t.summary?.toLowerCase().includes(searchLower)
-      );
-    }
-    
-    res.json(filtered);
+    const items = await db.listTutorials({ category, model, search });
+    res.json(items);
   } catch (error) {
     console.error('Get tutorials error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -189,12 +167,10 @@ app.get('/api/tutorials', (req, res) => {
 });
 
 // GET /api/tutorials/:id
-app.get('/api/tutorials/:id', (req, res) => {
+app.get('/api/tutorials/:id', async (req, res) => {
   try {
-    const tutorial = tutorials.find(t => t.id === req.params.id);
-    if (!tutorial) {
-      return res.status(404).json({ error: 'Tutorial not found' });
-    }
+    const tutorial = await db.getTutorial(req.params.id);
+    if (!tutorial) return res.status(404).json({ error: 'Tutorial not found' });
     res.json(tutorial);
   } catch (error) {
     console.error('Get tutorial error:', error);
@@ -203,19 +179,17 @@ app.get('/api/tutorials/:id', (req, res) => {
 });
 
 // POST /api/feedback
-app.post('/api/feedback', (req, res) => {
+app.post('/api/feedback', async (req, res) => {
   try {
     const { message, email } = req.body;
-    
     const feedbackItem = {
       id: `feedback-${Date.now()}`,
       message,
       email: email || 'anonymous',
       createdAt: new Date().toISOString()
     };
-    
-    feedback.push(feedbackItem);
-    res.status(201).json(feedbackItem);
+    const created = await db.createFeedback(feedbackItem);
+    res.status(201).json(created);
   } catch (error) {
     console.error('Create feedback error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -223,14 +197,18 @@ app.post('/api/feedback', (req, res) => {
 });
 
 // GET /api/categories
-app.get('/api/categories', (req, res) => {
+app.get('/api/categories', async (req, res) => {
   try {
-    res.json(categories.length > 0 ? categories : [
-      { id: 'phones', name: 'Phones', subcategories: [] },
-      { id: 'laptops', name: 'Laptops', subcategories: [] },
-      { id: 'tablets', name: 'Tablets', subcategories: [] },
-      { id: 'other', name: 'Other Devices', subcategories: [] }
-    ]);
+    const cats = await db.getCategories();
+    if (!cats || cats.length === 0) {
+      return res.json([
+        { id: 'phones', name: 'Phones', subcategories: [] },
+        { id: 'laptops', name: 'Laptops', subcategories: [] },
+        { id: 'tablets', name: 'Tablets', subcategories: [] },
+        { id: 'other', name: 'Other Devices', subcategories: [] }
+      ]);
+    }
+    res.json(cats);
   } catch (error) {
     console.error('Get categories error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -240,7 +218,7 @@ app.get('/api/categories', (req, res) => {
 // ==================== ADMIN API ENDPOINTS ====================
 
 // POST /api/admin/tutorials
-app.post('/api/admin/tutorials', authenticate, requireAdmin, (req, res) => {
+app.post('/api/admin/tutorials', authenticate, requireAdmin, async (req, res) => {
   try {
     const tutorial = {
       id: `tutorial-${Date.now()}`,
@@ -249,9 +227,8 @@ app.post('/api/admin/tutorials', authenticate, requireAdmin, (req, res) => {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
-    
-    tutorials.push(tutorial);
-    res.status(201).json(tutorial);
+    const created = await db.createTutorial(tutorial);
+    res.status(201).json(created);
   } catch (error) {
     console.error('Create tutorial error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -259,21 +236,11 @@ app.post('/api/admin/tutorials', authenticate, requireAdmin, (req, res) => {
 });
 
 // PUT /api/admin/tutorials/:id
-app.put('/api/admin/tutorials/:id', authenticate, requireAdmin, (req, res) => {
+app.put('/api/admin/tutorials/:id', authenticate, requireAdmin, async (req, res) => {
   try {
-    const index = tutorials.findIndex(t => t.id === req.params.id);
-    if (index === -1) {
-      return res.status(404).json({ error: 'Tutorial not found' });
-    }
-    
-    tutorials[index] = {
-      ...tutorials[index],
-      ...req.body,
-      id: req.params.id,
-      updatedAt: new Date().toISOString()
-    };
-    
-    res.json(tutorials[index]);
+    const updated = await db.updateTutorial(req.params.id, { ...req.body, updatedAt: new Date().toISOString() });
+    if (!updated) return res.status(404).json({ error: 'Tutorial not found' });
+    res.json(updated);
   } catch (error) {
     console.error('Update tutorial error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -281,14 +248,9 @@ app.put('/api/admin/tutorials/:id', authenticate, requireAdmin, (req, res) => {
 });
 
 // DELETE /api/admin/tutorials/:id
-app.delete('/api/admin/tutorials/:id', authenticate, requireAdmin, (req, res) => {
+app.delete('/api/admin/tutorials/:id', authenticate, requireAdmin, async (req, res) => {
   try {
-    const index = tutorials.findIndex(t => t.id === req.params.id);
-    if (index === -1) {
-      return res.status(404).json({ error: 'Tutorial not found' });
-    }
-    
-    tutorials.splice(index, 1);
+    await db.deleteTutorial(req.params.id);
     res.status(204).send();
   } catch (error) {
     console.error('Delete tutorial error:', error);
@@ -297,7 +259,7 @@ app.delete('/api/admin/tutorials/:id', authenticate, requireAdmin, (req, res) =>
 });
 
 // POST /api/admin/categories
-app.post('/api/admin/categories', authenticate, requireAdmin, (req, res) => {
+app.post('/api/admin/categories', authenticate, requireAdmin, async (req, res) => {
   try {
     const category = {
       id: req.body.id || `cat-${Date.now()}`,
@@ -305,8 +267,10 @@ app.post('/api/admin/categories', authenticate, requireAdmin, (req, res) => {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
-    
-    categories.push(category);
+    const existing = await db.getCategories();
+    const arr = Array.isArray(existing) ? existing : [];
+    arr.push(category);
+    await db.setCategories(arr);
     res.status(201).json(category);
   } catch (error) {
     console.error('Create category error:', error);
@@ -315,12 +279,9 @@ app.post('/api/admin/categories', authenticate, requireAdmin, (req, res) => {
 });
 
 // PUT /api/admin/categories
-app.put('/api/admin/categories', authenticate, requireAdmin, (req, res) => {
+app.put('/api/admin/categories', authenticate, requireAdmin, async (req, res) => {
   try {
-    // Clear existing and replace with new categories
-    categories.length = 0;
-    categories.push(...req.body);
-    
+    await db.setCategories(req.body);
     res.json({ message: 'Categories updated successfully' });
   } catch (error) {
     console.error('Update categories error:', error);
@@ -332,8 +293,7 @@ app.put('/api/admin/categories', authenticate, requireAdmin, (req, res) => {
 
 // Initialize admin account on startup
 async function initializeAdmin() {
-  const adminExists = users.find(u => u.role === 'admin');
-  
+  const adminExists = await db.getUserByUsername('admin');
   if (!adminExists) {
     console.log('🔐 Initializing admin account...');
     const passwordHash = await bcrypt.hash('admin123', 10);
@@ -346,7 +306,7 @@ async function initializeAdmin() {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
-    users.push(adminUser);
+    await db.createUser(adminUser);
     console.log('✅ Admin account created:');
     console.log('   Username: admin');
     console.log('   Password: admin123');
@@ -356,6 +316,7 @@ async function initializeAdmin() {
 
 // Start server
 async function startServer() {
+  await db.init();
   await initializeAdmin();
   
   app.listen(PORT, () => {
