@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { listTutorials } from "../azure";
 import Breadcrumb from "../components/Breadcrumb";
 
 const AndroidPhonePage = () => {
@@ -8,22 +7,27 @@ const AndroidPhonePage = () => {
   const [models, setModels] = useState([]);
 
   useEffect(() => {
-    const fetchAndroidModels = async () => {
-      try {
-        const tutorials = await listTutorials({ category: "Phones" });
-        const allModels = (tutorials || []).map(t => t.model).filter(Boolean);
-        const androidModels = [...new Set(
-          allModels.filter(model => 
-            !model.toLowerCase().includes("iphone") && 
-            !model.toLowerCase().includes("apple")
-          )
-        )];
-        setModels(androidModels.length > 0 ? androidModels : ["Samsung Galaxy S22", "Google Pixel", "OnePlus", "Xiaomi"]);
-      } catch (error) {
-        setModels(["Samsung Galaxy S22", "Google Pixel", "OnePlus", "Xiaomi"]);
+    const loadModels = async () => {
+      // Try to load from an optional backend API if configured
+      const apiBase = import.meta.env.VITE_API_BASE;
+      if (apiBase) {
+        try {
+          const res = await fetch(`${apiBase.replace(/\/$/, "")}/models?category=Phones&platform=Android`);
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data) && data.length > 0) {
+              setModels(data);
+              return;
+            }
+          }
+        } catch (e) {
+          // fall through to defaults
+        }
       }
+      // Fallback defaults if no backend
+      setModels(["Samsung Galaxy S22", "Google Pixel", "OnePlus", "Xiaomi"]);
     };
-    fetchAndroidModels();
+    loadModels();
   }, []);
 
   return (

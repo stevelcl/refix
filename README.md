@@ -77,3 +77,29 @@ npm run dev
 ---
 
 Built with ♥ following the ReFix MVP prompt.
+
+## Azure Blob uploads configuration
+
+Image uploads from the Creator Dashboard use Azure Blob Storage via a container SAS URL exposed to the client through Vite env vars.
+
+1) Create a container in your Azure Storage account (e.g., `media`).
+2) Generate a SAS for the container with at least these permissions:
+   - Write (w), Create (c), Add (a) and (optionally) Read (r) if you want direct reads
+   - Set a reasonable expiry (e.g., +7 days) and restrict to HTTPS only
+3) Copy the full Container SAS URL. It looks like:
+   `https://<account>.blob.core.windows.net/<container>?sv=...&ss=b&srt=c&sp=rcw...&se=...&sig=...`
+4) Create a file named `.env.local` in the project root and set:
+
+```
+VITE_BLOB_CONTAINER_SAS_URL=<paste your container SAS URL here>
+# Optional if you have a backend
+VITE_API_BASE=https://your-api.example.com
+```
+
+5) Restart the dev server so Vite picks up the env vars:
+
+```
+npm run dev
+```
+
+Security note: Container SAS URLs are sensitive; do not commit `.env.local`. Rotate the SAS periodically and consider narrowing permissions/expiry as needed.

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { listTutorials } from "../azure";
 import Breadcrumb from "../components/Breadcrumb";
 
 const PhoneRepairPage = ({ showAndroid = false }) => {
@@ -10,17 +9,22 @@ const PhoneRepairPage = ({ showAndroid = false }) => {
   useEffect(() => {
     if (showAndroid) {
       const fetchAndroidModels = async () => {
-        try {
-          const tutorials = await listTutorials({ category: "Phones" });
-          const models = [...new Set(
-            (tutorials || [])
-              .map(t => t.model)
-              .filter(model => model && !model.toLowerCase().includes("iphone") && !model.toLowerCase().includes("apple"))
-          )];
-          setAndroidModels(models.length > 0 ? models : ["Samsung Galaxy", "Google Pixel", "OnePlus"]);
-        } catch (error) {
-          setAndroidModels(["Samsung Galaxy", "Google Pixel", "OnePlus"]);
+        const apiBase = import.meta.env.VITE_API_BASE;
+        if (apiBase) {
+          try {
+            const res = await fetch(`${apiBase.replace(/\/$/, "")}/models?category=Phones&platform=Android`);
+            if (res.ok) {
+              const data = await res.json();
+              if (Array.isArray(data) && data.length > 0) {
+                setAndroidModels(data);
+                return;
+              }
+            }
+          } catch (error) {
+            // fall through
+          }
         }
+        setAndroidModels(["Samsung Galaxy", "Google Pixel", "OnePlus"]);
       };
       fetchAndroidModels();
     }

@@ -3,7 +3,12 @@
 // - Data operations via a backend API that talks to Cosmos DB
 //   Configure env vars in Vite: VITE_BLOB_CONTAINER_SAS_URL and VITE_API_BASE
 
-const containerSasUrl = import.meta.env.VITE_BLOB_CONTAINER_SAS_URL;
+// Optional: local fallback so devs can run without a .env.local
+// This file is generated in the repo: src/localEnv.js
+// eslint-disable-next-line import/no-unresolved
+import { VITE_BLOB_CONTAINER_SAS_URL as LOCAL_BLOB_SAS } from "./localEnv";
+
+const containerSasUrl = import.meta.env.VITE_BLOB_CONTAINER_SAS_URL || LOCAL_BLOB_SAS;
 const apiBase = import.meta.env.VITE_API_BASE;
 
 function ensure(value, name) {
@@ -24,15 +29,30 @@ export async function uploadImageToBlob(file, pathPrefix = "tutorials") {
   const sas = u.search; // ?sv=...
   const blobUrlWithSas = `${base.replace(/\/$/, "")}/${blobName}${sas}`;
 
-  const res = await fetch(blobUrlWithSas, {
-    method: "PUT",
-    headers: {
-      "x-ms-blob-type": "BlockBlob",
-      "x-ms-version": "2020-10-02",
-      "Content-Type": file.type || "application/octet-stream",
-    },
-    body: file,
-  });
+  let res;
+  try {
+    res = await fetch(blobUrlWithSas, {
+      method: "PUT",
+      headers: {
+        "x-ms-blob-type": "BlockBlob",
+        "x-ms-version": "2020-10-02",
+        "Content-Type": file.type || "application/octet-stream",
+      },
+      body: file,
+    });
+  } catch (networkError) {
+    // Most common causes:
+    // 1) CORS not configured on the Blob service for http://localhost:5173
+    // 2) SAS expired or clock skew
+    // 3) Mixed content (http vs https) or adblock/proxy interference
+    const hint =
+      "Network error during upload. Likely CORS/SAS issue.\n" +
+      "- Ensure Storage account CORS allows http://localhost:5173 with methods: PUT, OPTIONS, GET, HEAD\n" +
+      "- Allowed headers: * ; Exposed headers: x-ms-*, ETag, Last-Modified\n" +
+      "- Verify the SAS is not expired and time is correct (UTC)\n" +
+      "- Use HTTPS everywhere";
+    throw new Error(`${hint}\nDetails: ${networkError?.message || networkError}`);
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`Blob upload failed: ${res.status} ${text}`);

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { listTutorials } from "../azure";
 import Breadcrumb from "../components/Breadcrumb";
 
 const LaptopBrandPage = () => {
@@ -10,40 +9,28 @@ const LaptopBrandPage = () => {
 
   useEffect(() => {
     const fetchModels = async () => {
-      try {
-        // Fetch unique models from tutorials for this brand
-        const allTutorials = await listTutorials({ category: "Laptops" });
-        
-        // Filter by brand (assuming model names contain brand)
-        const brandModels = [...new Set(
-          allTutorials
-            .filter(t => t.model?.toLowerCase().includes(brand.toLowerCase()))
-            .map(t => t.model)
-        )];
-        
-        if (brandModels.length === 0) {
-          // Use default models if none found
-          const defaults = {
-            asus: ["Asus ROG Laptop", "Asus ZenBook", "Asus VivoBook"],
-            acer: ["Acer Predator", "Acer Aspire", "Acer Nitro"],
-            hp: ["HP Pavilion", "HP EliteBook", "HP Spectre"],
-            mac: ["MacBook Pro", "MacBook Air", "MacBook"]
-          };
-          setModels(defaults[brand.toLowerCase()] || []);
-        } else {
-          setModels(brandModels);
+      const apiBase = import.meta.env.VITE_API_BASE;
+      if (apiBase) {
+        try {
+          const res = await fetch(`${apiBase.replace(/\/$/, "")}/models?category=Laptops&brand=${encodeURIComponent(brand)}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data) && data.length > 0) {
+              setModels(data);
+              return;
+            }
+          }
+        } catch (error) {
+          // fall through
         }
-      } catch (error) {
-        console.error("Error fetching models:", error);
-        // Fallback to defaults
-        const defaults = {
-          asus: ["Asus ROG Laptop", "Asus ZenBook", "Asus VivoBook"],
-          acer: ["Acer Predator", "Acer Aspire"],
-          hp: ["HP Pavilion", "HP EliteBook"],
-          mac: ["MacBook Pro", "MacBook Air"]
-        };
-        setModels(defaults[brand.toLowerCase()] || []);
       }
+      const defaults = {
+        asus: ["Asus ROG Laptop", "Asus ZenBook", "Asus VivoBook"],
+        acer: ["Acer Predator", "Acer Aspire", "Acer Nitro"],
+        hp: ["HP Pavilion", "HP EliteBook", "HP Spectre"],
+        mac: ["MacBook Pro", "MacBook Air", "MacBook"]
+      };
+      setModels(defaults[brand.toLowerCase()] || []);
     };
     fetchModels();
   }, [brand]);

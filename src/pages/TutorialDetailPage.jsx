@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getTutorial } from "../azure";
 import TutorialStepList from "../components/TutorialStepList";
 import Breadcrumb from "../components/Breadcrumb";
 
@@ -17,8 +16,35 @@ const TutorialDetailPage = () => {
 
   useEffect(() => {
     const fetchGuide = async () => {
-      const item = await getTutorial(id);
-      if (item) setData(item);
+      const apiBase = import.meta.env.VITE_API_BASE;
+      if (apiBase) {
+        try {
+          const res = await fetch(`${apiBase.replace(/\/$/, "")}/tutorials/${id}`);
+          if (res.ok) {
+            const item = await res.json();
+            setData(item);
+            return;
+          }
+        } catch (e) {
+          // fall through to demo data
+        }
+      }
+      // Demo fallback if no backend connected
+      setData({
+        id,
+        title: "Sample Guide",
+        category: "Phones",
+        model: "Demo Model",
+        difficulty: "Beginner",
+        durationMinutes: 30,
+        summary: "This is a sample guide shown when no backend is configured.",
+        tools: ["Phillips #00", "Spudger"],
+        steps: [
+          "Power off the device and remove the SIM tray.",
+          "Heat the edges and carefully lift the screen.",
+          "Disconnect the battery and remove the component.",
+        ]
+      });
     };
     fetchGuide();
   }, [id]);

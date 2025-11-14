@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { listTutorials } from "../azure";
 import Breadcrumb from "../components/Breadcrumb";
 
 const ModelRepairPage = () => {
@@ -26,35 +25,43 @@ const ModelRepairPage = () => {
   }
 
   useEffect(() => {
-    const fetchRepairs = async () => {
-      try {
-        // Fetch tutorials for this specific model
-        const modelName = decodeURIComponent(model).replace(/-/g, " ");
-        const repairs = await listTutorials({ model: modelName });
-        
-        // Group by repair type (extract from title)
-        const types = repairs.map(r => ({
-          id: r.id,
-          title: r.title,
-          thumbnailUrl: r.thumbnailUrl,
-          type: extractRepairType(r.title)
-        }));
-        
-        setRepairTypes(types);
-        if (repairs.length > 0 && repairs[0].thumbnailUrl) {
-          setDeviceImage(repairs[0].thumbnailUrl);
+    const loadRepairs = async () => {
+      const modelName = decodeURIComponent(model).replace(/-/g, " ");
+      const apiBase = import.meta.env.VITE_API_BASE;
+      // Try backend first
+      if (apiBase) {
+        try {
+          const res = await fetch(`${apiBase.replace(/\/$/, "")}/tutorials?model=${encodeURIComponent(modelName)}`);
+          if (res.ok) {
+            const items = await res.json();
+            if (Array.isArray(items)) {
+              const types = items.map(r => ({
+                id: r.id,
+                title: r.title,
+                thumbnailUrl: r.thumbnailUrl,
+                type: extractRepairType(r.title)
+              }));
+              setRepairTypes(types);
+              if (items.length > 0 && items[0].thumbnailUrl) setDeviceImage(items[0].thumbnailUrl);
+              return;
+            }
+          }
+        } catch (e) {
+          // fall back below
         }
-      } catch (error) {
-        console.error("Error fetching repairs:", error);
       }
+      // Fallback sample when no backend available
+      const sample = [
+        { id: "demo-1", title: `${modelName} Screen Replacement`, thumbnailUrl: "", type: "Screen" },
+        { id: "demo-2", title: `${modelName} Battery Replacement`, thumbnailUrl: "", type: "Battery" }
+      ];
+      setRepairTypes(sample);
     };
-    if (model) {
-      fetchRepairs();
-    }
+    if (model) loadRepairs();
   }, [model]);
 
   const extractRepairType = (title) => {
-    const lower = title.toLowerCase();
+    const lower = (title || "").toLowerCase();
     if (lower.includes("screen") || lower.includes("display")) return "Screen";
     if (lower.includes("battery")) return "Battery";
     if (lower.includes("loudspeaker") || lower.includes("speaker")) return "Loudspeaker";
