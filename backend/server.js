@@ -35,11 +35,13 @@ function authenticate(req, res, next) {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    const user = users.find(u => u.id === decoded.userId);
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid token' });
-    }
-    req.user = user;
+    // Store decoded token data in req.user for use in route handlers
+    // Route handlers can verify with db if needed
+    req.user = {
+      id: decoded.userId,
+      username: decoded.username,
+      role: decoded.role
+    };
     next();
   } catch (error) {
     return res.status(401).json({ error: 'Invalid or expired token' });
