@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "refix-backend": "file:.."
+  }
+}
