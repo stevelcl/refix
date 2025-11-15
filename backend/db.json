@@ -1,0 +1,16 @@
+{
+  "users": [
+    {
+      "id": "admin-user-001",
+      "username": "admin",
+      "email": "admin@refix.com",
+      "passwordHash": "$2b$10$/bTWuZVw0geFqCqMdnbDxe5UkSlaxkMY.DYtzMgwiBcA4VmuTJDfi",
+      "role": "admin",
+      "createdAt": "2025-11-15T05:25:25.603Z",
+      "updatedAt": "2025-11-15T05:25:25.603Z"
+    }
+  ],
+  "tutorials": [],
+  "categories": [],
+  "feedback": []
+}
