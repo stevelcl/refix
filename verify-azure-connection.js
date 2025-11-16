@@ -46,27 +46,33 @@ function loadEnvFile(filePath) {
               (value.startsWith("'") && value.endsWith("'"))) {
             value = value.slice(1, -1);
           }
-          if (!process.env[key]) {
-            process.env[key] = value;
-          }
+          // Always set (override) to ensure backend/.env takes precedence
+          process.env[key] = value;
         }
       }
     });
+    return true;
+  }
+  return false;
+}
+
+// Load backend/.env first (has Cosmos DB credentials)
+const backendEnvPath = path.join(__dirname, 'backend', '.env');
+if (fs.existsSync(backendEnvPath)) {
+  loadEnvFile(backendEnvPath);
+} else {
+  // Try to load dotenv from backend if available
+  try {
+    const dotenvPath = path.join(__dirname, 'backend', 'node_modules', 'dotenv');
+    if (fs.existsSync(dotenvPath)) {
+      require(dotenvPath).config({ path: backendEnvPath });
+    }
+  } catch (e) {
+    // dotenv not available, already tried manual loading
   }
 }
 
-// Try to load dotenv from backend if available
-try {
-  const dotenvPath = path.join(__dirname, 'backend', 'node_modules', 'dotenv');
-  if (fs.existsSync(dotenvPath)) {
-    require(dotenvPath).config({ path: path.join(__dirname, 'backend', '.env') });
-  }
-} catch (e) {
-  // Fall back to manual loading
-  loadEnvFile(path.join(__dirname, 'backend', '.env'));
-}
-
-// Also load root .env
+// Also load root .env (for frontend config)
 loadEnvFile(path.join(__dirname, '.env'));
 
 // Colors for console output
@@ -168,9 +174,16 @@ async function testBackendCosmosConnection() {
       const { resource } = await testContainer.items.create(testDoc);
       logSuccess('Write test successful');
       
-      // Clean up test document
-      await testContainer.item(testDoc.id, testDoc.id).delete();
-      logInfo('Test document cleaned up');
+      // Clean up test document (ignore errors if document doesn't exist)
+      try {
+        await testContainer.item(testDoc.id, testDoc.id).delete();
+        logInfo('Test document cleaned up');
+      } catch (deleteError) {
+        // Ignore 404 errors - document may have been auto-deleted or never existed
+        if (!deleteError.message || !deleteError.message.includes('does not exist')) {
+          logWarning(`Cleanup warning: ${deleteError.message}`);
+        }
+      }
     } catch (writeError) {
       logError(`Write test failed: ${writeError.message}`);
       return false;
@@ -318,7 +331,7 @@ async function testFrontendBackendConnection() {
         const options = {
           hostname: apiUrl.hostname,
           port: apiUrl.port || (apiUrl.protocol === 'https:' ? 443 : 80),
-          path: '/tutorials',
+          path: apiUrl.pathname + '/tutorials',
           method: 'GET',
           headers: { 'Accept': 'application/json' }
         };
