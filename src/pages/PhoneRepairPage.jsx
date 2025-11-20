@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Breadcrumb from "../components/Breadcrumb";
-import { getPublicSubcategories } from "../azure";
+import { getCategories } from "../azure";
+import { buildDeviceRoute, findCategoryByKeyword, sortSubcategories } from "../utils/catalog";
 
 const FALLBACK_BRANDS = [
   { name: "Apple iPhone", route: "/device/phone/apple-iphone", icon: "🍎" },
@@ -12,6 +13,7 @@ const PhoneRepairPage = ({ showAndroid = false }) => {
   const navigate = useNavigate();
   const [androidModels, setAndroidModels] = useState([]);
   const [brands, setBrands] = useState([]);
+  const [categoryName, setCategoryName] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -22,34 +24,26 @@ const PhoneRepairPage = ({ showAndroid = false }) => {
 
   const fetchPhoneBrands = async () => {
     try {
-      // Try to fetch "Phone" category subcategories
-      // First, get all public categories to find the Phone category ID
-      const { getPublicCategories } = await import("../azure");
-      const allCategories = await getPublicCategories();
-      const phoneCategory = allCategories.find(c => 
-        c.name.toLowerCase().includes('phone') && !c.parentId
-      );
+      const allCategories = await getCategories();
+      const phoneCategory = findCategoryByKeyword(allCategories, "phone");
 
-      if (phoneCategory) {
-        const subcats = await getPublicSubcategories(phoneCategory.id);
-        if (subcats && subcats.length > 0) {
-          const transformed = subcats
-            .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
-            .map(sub => ({
-              name: sub.name,
-              route: sub.path || `/device/phone/${sub.name.toLowerCase().replace(/\s+/g, '-')}`,
-              icon: sub.imageUrl ? null : (sub.icon || "📱"),
-              imageUrl: sub.imageUrl
-            }));
-          setBrands(transformed);
-        } else {
-          setBrands(FALLBACK_BRANDS);
-        }
+      if (phoneCategory && phoneCategory.subcategories?.length) {
+        setCategoryName(phoneCategory.name);
+        const transformed = sortSubcategories(phoneCategory.subcategories).map((sub) => ({
+          id: sub.id || sub.name,
+          name: sub.name,
+          route: buildDeviceRoute(phoneCategory.name, sub.name),
+          icon: "📱",
+          imageUrl: sub.imageUrl || null,
+        }));
+        setBrands(transformed);
       } else {
+        setCategoryName(null);
         setBrands(FALLBACK_BRANDS);
       }
     } catch (error) {
-      console.error('Failed to fetch phone brands:', error);
+      console.error("Failed to fetch phone brands:", error);
+      setCategoryName(null);
       setBrands(FALLBACK_BRANDS);
     } finally {
       setLoading(false);
@@ -135,13 +129,13 @@ const PhoneRepairPage = ({ showAndroid = false }) => {
             {brands.map((brand) => (
               <div
                 key={brand.name}
-                onClick={() => navigate(brand.route)}
+                onClick={() => navigate(brand.route || buildDeviceRoute(categoryName || "Phone", brand.name))}
                 className="bg-white rounded-xl shadow-md border border-neutral-200 p-8 flex flex-col items-center cursor-pointer hover:shadow-lg hover:border-blue-300 transition-all group"
               >
                 {brand.imageUrl ? (
                   <img src={brand.imageUrl} alt={brand.name} className="w-16 h-16 object-contain mb-4" />
                 ) : (
-                  <div className="text-6xl mb-4">{brand.icon}</div>
+                  <div className="text-6xl mb-4">{brand.icon || "📱"}</div>
                 )}
                 <h3 className="text-xl font-semibold text-neutral-900">{brand.name}</h3>
               </div>
