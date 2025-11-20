@@ -8,6 +8,9 @@
   // Associate this file with the Tailwind language mode only for index.css
   "files.associations": {
     "src/index.css": "tailwindcss"
+  },
+  "github.copilot.advanced": {
+    
   }
 }
 

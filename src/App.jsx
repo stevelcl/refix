@@ -14,6 +14,8 @@ import ModelRepairPage from "./pages/ModelRepairPage";
 import LaptopRepairPage from "./pages/LaptopRepairPage";
 import LaptopBrandPage from "./pages/LaptopBrandPage";
 import MoreDevicesPage from "./pages/MoreDevicesPage";
+import BrandModelsPage from "./pages/BrandModelsPage";
+import PartTutorialsPage from "./pages/PartTutorialsPage";
 
 const App = () => (
   <div className="bg-[#f9fafe] min-h-screen flex flex-col">
@@ -21,17 +23,20 @@ const App = () => (
     <main className="flex-1">
       <Routes>
         <Route path="/" element={<HomePage />} />
-        {/* Hierarchical Device Navigation */}
+        
+        {/* New Hierarchical Device Navigation: Category → Brand → Model → Part */}
+        <Route path="/device/:category/:brand" element={<BrandModelsPage />} />
+        <Route path="/device/:category/:brand/:model" element={<ModelRepairPage />} />
+        <Route path="/device/:category/:brand/:model/:part" element={<PartTutorialsPage />} />
+        
+        {/* Legacy/Specific Device Routes (kept for backward compatibility) */}
         <Route path="/device/phone" element={<PhoneRepairPage />} />
         <Route path="/device/phone/apple-iphone" element={<AppleiPhonePage />} />
-        <Route path="/device/phone/apple-iphone/:model" element={<ModelRepairPage />} />
         <Route path="/device/phone/android" element={<AndroidPhonePage />} />
-        <Route path="/device/phone/android/:model" element={<ModelRepairPage />} />
         <Route path="/device/laptop" element={<LaptopRepairPage />} />
-        <Route path="/device/laptop/:brand" element={<LaptopBrandPage />} />
-        <Route path="/device/laptop/:brand/:model" element={<ModelRepairPage />} />
         <Route path="/device/more" element={<MoreDevicesPage />} />
-        {/* Legacy Tutorial Routes */}
+        
+        {/* Tutorial Routes */}
         <Route path="/tutorials" element={<TutorialsPage />} />
         <Route path="/tutorials/:id" element={<TutorialDetailPage />} />
         <Route path="/feedback" element={<FeedbackPage />} />

@@ -35,6 +35,7 @@ async function init() {
       await ensure('tutorials');
       await ensure('categories');
       await ensure('feedback');
+      await ensure('publicCategories');
       cosmos = client;
       useCosmos = true;
       console.log('✅ Using Azure Cosmos DB for persistence');
@@ -52,7 +53,7 @@ async function init() {
 
   // Fallback: ensure JSON file exists
   if (!fs.existsSync(JSON_DB_FILE)) {
-    fs.writeFileSync(JSON_DB_FILE, JSON.stringify({ users: [], tutorials: [], categories: [], feedback: [] }, null, 2));
+    fs.writeFileSync(JSON_DB_FILE, JSON.stringify({ users: [], tutorials: [], categories: [], feedback: [], publicCategories: [] }, null, 2));
   }
   console.log('ℹ️  Using local JSON file for persistence:', JSON_DB_FILE);
 }
@@ -107,14 +108,16 @@ async function createUser(user) {
 }
 
 // ----------------- Tutorials -----------------
-async function listTutorials({ category, model, search } = {}) {
+async function listTutorials({ category, brand, model, part, search } = {}) {
   if (useCosmos) {
     const container = cosmosContainers['tutorials'];
     let query = 'SELECT * FROM c';
     const filters = [];
     const params = [];
     if (category && category !== 'All') { filters.push('c.category = @category'); params.push({ name: '@category', value: category }); }
+    if (brand) { filters.push('c.brand = @brand'); params.push({ name: '@brand', value: brand }); }
     if (model) { filters.push('c.model = @model'); params.push({ name: '@model', value: model }); }
+    if (part) { filters.push('c.part = @part'); params.push({ name: '@part', value: part }); }
     if (search) { filters.push('(CONTAINS(LOWER(c.title), @search) OR CONTAINS(LOWER(c.summary), @search))'); params.push({ name: '@search', value: search.toLowerCase() }); }
     if (filters.length) query += ' WHERE ' + filters.join(' AND ');
     const { resources } = await container.items.query({ query, parameters: params }).fetchAll();
@@ -123,7 +126,9 @@ async function listTutorials({ category, model, search } = {}) {
   const db = await readJson();
   let items = db.tutorials || [];
   if (category && category !== 'All') items = items.filter(t => t.category === category);
+  if (brand) items = items.filter(t => t.brand === brand);
   if (model) items = items.filter(t => t.model === model);
+  if (part) items = items.filter(t => t.part === part);
   if (search) {
     const s = search.toLowerCase();
     items = items.filter(t => (t.title || '').toLowerCase().includes(s) || (t.summary || '').toLowerCase().includes(s));
@@ -227,6 +232,88 @@ async function createFeedback(item) {
   return item;
 }
 
+// ----------------- Public Categories -----------------
+async function getPublicCategories() {
+  if (useCosmos) {
+    const container = cosmosContainers['publicCategories'];
+    const { resources } = await container.items.query({ query: 'SELECT * FROM c ORDER BY c.displayOrder' }).fetchAll();
+    return resources;
+  }
+  const db = await readJson();
+  return (db.publicCategories || []).sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+}
+
+async function getPublicCategoryById(id) {
+  if (useCosmos) {
+    const container = cosmosContainers['publicCategories'];
+    try {
+      const { resource } = await container.item(id, id).read();
+      return resource;
+    } catch (e) {
+      return null;
+    }
+  }
+  const db = await readJson();
+  return (db.publicCategories || []).find(c => c.id === id);
+}
+
+async function getPublicSubcategories(parentId) {
+  if (useCosmos) {
+    const container = cosmosContainers['publicCategories'];
+    const querySpec = { 
+      query: 'SELECT * FROM c WHERE c.parentId = @parentId ORDER BY c.displayOrder', 
+      parameters: [{ name: '@parentId', value: parentId }] 
+    };
+    const { resources } = await container.items.query(querySpec).fetchAll();
+    return resources;
+  }
+  const db = await readJson();
+  return (db.publicCategories || [])
+    .filter(c => c.parentId === parentId)
+    .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+}
+
+async function createPublicCategory(category) {
+  if (useCosmos) {
+    const container = cosmosContainers['publicCategories'];
+    const { resource } = await container.items.create(category);
+    return resource;
+  }
+  const db = await readJson();
+  db.publicCategories = db.publicCategories || [];
+  db.publicCategories.push(category);
+  await writeJson(db);
+  return category;
+}
+
+async function updatePublicCategory(id, updates) {
+  if (useCosmos) {
+    const container = cosmosContainers['publicCategories'];
+    const { resource: existing } = await container.item(id, id).read();
+    const updated = { ...existing, ...updates, id };
+    const { resource } = await container.item(id, id).replace(updated);
+    return resource;
+  }
+  const db = await readJson();
+  db.publicCategories = db.publicCategories || [];
+  const idx = db.publicCategories.findIndex(c => c.id === id);
+  if (idx === -1) return null;
+  db.publicCategories[idx] = { ...db.publicCategories[idx], ...updates, id };
+  await writeJson(db);
+  return db.publicCategories[idx];
+}
+
+async function deletePublicCategory(id) {
+  if (useCosmos) {
+    const container = cosmosContainers['publicCategories'];
+    await container.item(id, id).delete();
+    return;
+  }
+  const db = await readJson();
+  db.publicCategories = (db.publicCategories || []).filter(c => c.id !== id);
+  await writeJson(db);
+}
+
 module.exports = {
   init,
   // users
@@ -244,4 +331,11 @@ module.exports = {
   setCategories,
   // feedback
   createFeedback,
+  // public categories
+  getPublicCategories,
+  getPublicCategoryById,
+  getPublicSubcategories,
+  createPublicCategory,
+  updatePublicCategory,
+  deletePublicCategory,
 };

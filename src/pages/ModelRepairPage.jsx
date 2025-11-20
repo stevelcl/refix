@@ -1,170 +1,132 @@
 import React, { useEffect, useState } from "react";
-import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import Breadcrumb from "../components/Breadcrumb";
 
 const ModelRepairPage = () => {
-  const { brand, model } = useParams();
-  const location = useLocation();
+  const { category, brand, model } = useParams();
   const navigate = useNavigate();
-  const [repairTypes, setRepairTypes] = useState([]);
-  const [deviceImage, setDeviceImage] = useState("");
-
-  // Extract category and brand from URL path
-  let category = "unknown";
-  let detectedBrand = brand;
-  
-  if (location.pathname.includes("/phone/")) {
-    category = "phone";
-    if (location.pathname.includes("/apple-iphone/")) {
-      detectedBrand = "apple-iphone";
-    } else if (location.pathname.includes("/android/")) {
-      detectedBrand = "android";
-    }
-  } else if (location.pathname.includes("/laptop/")) {
-    category = "laptop";
-  }
+  const [parts, setParts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    const loadRepairs = async () => {
-      const modelName = decodeURIComponent(model).replace(/-/g, " ");
+    fetchParts();
+  }, [category, brand, model]);
+
+  const fetchParts = async () => {
+    setLoading(true);
+    setError(null);
+    try {
       const apiBase = import.meta.env.VITE_API_BASE;
-      // Try backend first
-      if (apiBase) {
-        try {
-          const res = await fetch(`${apiBase.replace(/\/$/, "")}/tutorials?model=${encodeURIComponent(modelName)}`);
-          if (res.ok) {
-            const items = await res.json();
-            if (Array.isArray(items)) {
-              const types = items.map(r => ({
-                id: r.id,
-                title: r.title,
-                thumbnailUrl: r.thumbnailUrl,
-                type: extractRepairType(r.title)
-              }));
-              setRepairTypes(types);
-              if (items.length > 0 && items[0].thumbnailUrl) setDeviceImage(items[0].thumbnailUrl);
-              return;
-            }
-          }
-        } catch (e) {
-          // fall back below
-        }
+      if (!apiBase) {
+        throw new Error('API base URL not configured');
       }
-      // Fallback sample when no backend available
-      const sample = [
-        { id: "demo-1", title: `${modelName} Screen Replacement`, thumbnailUrl: "", type: "Screen" },
-        { id: "demo-2", title: `${modelName} Battery Replacement`, thumbnailUrl: "", type: "Battery" }
-      ];
-      setRepairTypes(sample);
-    };
-    if (model) loadRepairs();
-  }, [model]);
 
-  const extractRepairType = (title) => {
-    const lower = (title || "").toLowerCase();
-    if (lower.includes("screen") || lower.includes("display")) return "Screen";
-    if (lower.includes("battery")) return "Battery";
-    if (lower.includes("loudspeaker") || lower.includes("speaker")) return "Loudspeaker";
-    if (lower.includes("microphone")) return "Microphone";
-    if (lower.includes("keyboard")) return "Keyboard Keys";
-    if (lower.includes("fan")) return "Fan";
-    return "Other";
-  };
-
-  const formatModelName = (name) => {
-    return name.split('-').map(word => 
-      word.charAt(0).toUpperCase() + word.slice(1)
-    ).join(' ');
-  };
-
-  const getCategoryLabel = () => {
-    if (category === "phone") return "Phone";
-    if (category === "laptop") return "PC Laptop";
-    return category;
-  };
-
-  // Build breadcrumb based on URL structure
-  const buildBreadcrumb = () => {
-    const items = [{ label: "Device", to: "/" }];
-    
-    if (category === "phone") {
-      items.push({ label: "Phone", to: "/device/phone" });
-      if (detectedBrand === "apple-iphone") {
-        items.push({ label: "Apple iPhone", to: "/device/phone/apple-iphone" });
-      } else if (detectedBrand === "android") {
-        items.push({ label: "Android Phone", to: "/device/phone/android" });
+      // Fetch parts for this model
+      const response = await fetch(
+        `${apiBase}/categories/${encodeURIComponent(category)}/brands/${encodeURIComponent(brand)}/models/${encodeURIComponent(model)}/parts`
+      );
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch parts');
       }
-    } else if (category === "laptop") {
-      items.push({ label: "PC Laptop", to: "/device/laptop" });
-      if (detectedBrand) {
-        items.push({ label: formatModelName(detectedBrand), to: `/device/laptop/${detectedBrand}` });
-      }
+
+      const data = await response.json();
+      setParts(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Error fetching parts:', err);
+      setError(err.message);
+      setParts([]);
+    } finally {
+      setLoading(false);
     }
-    
-    items.push({ label: formatModelName(model) });
-    return items;
   };
 
-  const breadcrumbItems = buildBreadcrumb();
+  const getPartIcon = (partName) => {
+    const lower = partName.toLowerCase();
+    if (lower.includes('screen') || lower.includes('display')) return '📱';
+    if (lower.includes('battery')) return '🔋';
+    if (lower.includes('speaker') || lower.includes('loudspeaker')) return '🔊';
+    if (lower.includes('microphone') || lower.includes('mic')) return '🎤';
+    if (lower.includes('camera')) return '📷';
+    if (lower.includes('button')) return '🔘';
+    if (lower.includes('port') || lower.includes('charging')) return '🔌';
+    if (lower.includes('keyboard')) return '⌨️';
+    if (lower.includes('touchpad') || lower.includes('trackpad')) return '🖱️';
+    if (lower.includes('fan')) return '🌀';
+    if (lower.includes('memory') || lower.includes('ram')) return '💾';
+    if (lower.includes('storage') || lower.includes('ssd') || lower.includes('hard')) return '💿';
+    if (lower.includes('wifi') || lower.includes('wireless')) return '📡';
+    return '🔧';
+  };
 
-  const defaultRepairTypes = [
-    { name: "Screen", icon: "🖥️" },
-    { name: "Battery", icon: "🔋" },
-    { name: "Loudspeaker", icon: "🔊" },
-    { name: "Microphone", icon: "🎤" }
+  const handlePartClick = (part) => {
+    const route = `/device/${encodeURIComponent(category)}/${encodeURIComponent(brand)}/${encodeURIComponent(model)}/${encodeURIComponent(part)}`;
+    navigate(route);
+  };
+
+  const breadcrumbItems = [
+    { label: "Device", to: "/" },
+    { label: category, to: `/device/${category}` },
+    { label: brand, to: `/device/${category}/${brand}` },
+    { label: model }
   ];
-
-  const availableTypes = repairTypes.length > 0 
-    ? [...new Set(repairTypes.map(r => r.type))].map(type => ({
-        name: type,
-        icon: defaultRepairTypes.find(d => d.name === type)?.icon || "🔧",
-        tutorials: repairTypes.filter(r => r.type === type)
-      }))
-    : defaultRepairTypes.map(type => ({ ...type, tutorials: [] }));
 
   return (
     <div className="min-h-screen bg-white">
       <Breadcrumb items={breadcrumbItems} />
       <div className="max-w-7xl mx-auto px-6 py-12">
-        <h1 className="text-3xl font-bold text-neutral-900 mb-8">
-          {formatModelName(model)} Repair
+        <h1 className="text-3xl font-bold text-neutral-900 mb-2">
+          {model} Repair
         </h1>
-        <div className="grid md:grid-cols-3 gap-8">
-          {deviceImage && (
-            <div className="md:col-span-1">
-              <img
-                src={deviceImage}
-                alt={formatModelName(model)}
-                className="w-full rounded-xl shadow-md"
-              />
-            </div>
-          )}
-          <div className={deviceImage ? "md:col-span-2" : "md:col-span-3"}>
-            <h2 className="text-xl font-semibold text-neutral-900 mb-6">Guides:</h2>
-            <div className="grid sm:grid-cols-2 gap-6">
-              {availableTypes.map((type, idx) => (
-                <div
-                  key={idx}
-                  onClick={() => {
-                    if (type.tutorials && type.tutorials.length > 0) {
-                      navigate(`/tutorials/${type.tutorials[0].id}`);
-                    } else {
-                      // Navigate to a generic guide page or show message
-                      const basePath = category === "phone" 
-                        ? `/device/phone/${detectedBrand}/${model}` 
-                        : `/device/laptop/${detectedBrand}/${model}`;
-                      navigate(`${basePath}/${type.name.toLowerCase()}`);
-                    }
-                  }}
-                  className="bg-white rounded-xl shadow-md border border-neutral-200 p-6 flex flex-col items-center cursor-pointer hover:shadow-lg hover:border-blue-300 transition-all group"
-                >
-                  <div className="text-4xl mb-3">{type.icon}</div>
-                  <h3 className="text-lg font-semibold text-neutral-900">{type.name}</h3>
-                </div>
-              ))}
-            </div>
+        <p className="text-neutral-600 mb-8">
+          Select a part to view repair guides
+        </p>
+
+        {loading ? (
+          <div className="text-center py-12">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <p className="text-neutral-500 mt-3">Loading parts...</p>
           </div>
-        </div>
+        ) : error ? (
+          <div className="text-center py-12">
+            <div className="text-red-600 mb-3">⚠️</div>
+            <p className="text-neutral-600">{error}</p>
+            <button
+              onClick={() => navigate(-1)}
+              className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              Go Back
+            </button>
+          </div>
+        ) : parts.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-neutral-500 mb-4">No parts found for {model}</p>
+            <button
+              onClick={() => navigate(-1)}
+              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              Go Back
+            </button>
+          </div>
+        ) : (
+          <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            {parts.map((part, idx) => (
+              <div
+                key={idx}
+                onClick={() => handlePartClick(part)}
+                className="bg-white rounded-xl shadow-md border border-neutral-200 p-6 cursor-pointer hover:shadow-lg hover:border-blue-300 transition-all group"
+              >
+                <div className="w-full h-24 flex items-center justify-center mb-4">
+                  <span className="text-5xl">{getPartIcon(part)}</span>
+                </div>
+                <h3 className="text-base font-semibold text-neutral-900 text-center">
+                  {part}
+                </h3>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -6,10 +6,10 @@
 // Optional: local fallback so devs can run without a .env.local
 // This file is generated in the repo: src/localEnv.js
 // eslint-disable-next-line import/no-unresolved
-import { VITE_BLOB_CONTAINER_SAS_URL as LOCAL_BLOB_SAS } from "./localEnv";
+import { VITE_BLOB_CONTAINER_SAS_URL as LOCAL_BLOB_SAS, VITE_API_BASE as LOCAL_API_BASE } from "./localEnv";
 
 const containerSasUrl = import.meta.env.VITE_BLOB_CONTAINER_SAS_URL || LOCAL_BLOB_SAS;
-const apiBase = import.meta.env.VITE_API_BASE;
+const apiBase = import.meta.env.VITE_API_BASE || LOCAL_API_BASE;
 
 function ensure(value, name) {
   if (!value) throw new Error(`${name} is not configured`);
@@ -254,5 +254,36 @@ export async function updateCategories(categories) {
   return api(`/admin/categories`, {
     method: "PUT",
     body: JSON.stringify(categories),
+  });
+}
+
+// Public Category Management APIs
+export async function getPublicCategories() {
+  // Public read access
+  return api(`/public-categories`);
+}
+
+export async function getPublicSubcategories(parentId) {
+  // Public read access
+  return api(`/public-categories/${encodeURIComponent(parentId)}/subcategories`);
+}
+
+export async function createPublicCategory(data) {
+  return api(`/admin/public-categories`, { 
+    method: "POST", 
+    body: JSON.stringify(data) 
+  });
+}
+
+export async function updatePublicCategory(id, data) {
+  return api(`/admin/public-categories/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deletePublicCategory(id) {
+  return api(`/admin/public-categories/${encodeURIComponent(id)}`, {
+    method: "DELETE",
   });
 }

@@ -1,10 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, X } from "lucide-react";
 import { Smartphone, Laptop, Monitor } from "lucide-react";
 import heroBackground from '../assets/4fbcc306fecdeb4dcd083583022be42ce5567ffe.png';
+import { getPublicCategories } from '../azure';
 
-const CATEGORIES = [
+const FALLBACK_CATEGORIES = [
   {
     name: "Phone",
     route: "/device/phone",
@@ -25,6 +26,42 @@ const CATEGORIES = [
 const HomePage = () => {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  const fetchCategories = async () => {
+    try {
+      const cats = await getPublicCategories();
+      if (cats && cats.length > 0) {
+        // Transform API categories to match component structure
+        const transformed = cats
+          .filter(c => !c.parentId) // Only top-level categories
+          .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
+          .map(cat => ({
+            name: cat.name,
+            route: cat.path,
+            icon: cat.imageUrl ? (
+              <img src={cat.imageUrl} alt={cat.name} className="w-16 h-16 object-contain" />
+            ) : (
+              <span className="text-6xl">{cat.icon}</span>
+            ),
+            iconType: cat.imageUrl ? 'image' : 'emoji'
+          }));
+        setCategories(transformed);
+      } else {
+        setCategories(FALLBACK_CATEGORIES);
+      }
+    } catch (error) {
+      console.error('Failed to fetch categories:', error);
+      setCategories(FALLBACK_CATEGORIES);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -87,7 +124,7 @@ const HomePage = () => {
                 )}
               </div>
             </form>
-          </div>
+            </div>
         </div>
       </section>
 
@@ -99,28 +136,38 @@ const HomePage = () => {
               Choose a device you need to fix.
             </h2>
           </div>
-          <div className="grid md:grid-cols-3 gap-8 mb-6">
-            {CATEGORIES.map((category) => (
-              <div
-                key={category.name}
-                onClick={() => navigate(category.route)}
-                className="bg-neutral-50 rounded-xl border border-neutral-200 p-8 flex flex-col items-center cursor-pointer hover:shadow-lg hover:border-blue-300 transition-all group relative"
-              >
-                <div className="text-blue-600 mb-4 group-hover:scale-110 transition-transform">
-                  {category.icon}
-                </div>
-                <h3 className="text-xl font-semibold text-neutral-900 mb-4">{category.name}</h3>
-                <button className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center hover:bg-blue-700 transition">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
+          
+          {loading ? (
+            <div className="text-center py-12">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <p className="text-neutral-500 mt-3">Loading categories...</p>
+            </div>
+          ) : (
+            <>
+              <div className="grid md:grid-cols-3 gap-8 mb-6">
+                {categories.map((category) => (
+                  <div
+                    key={category.name}
+                    onClick={() => navigate(category.route)}
+                    className="bg-neutral-50 rounded-xl border border-neutral-200 p-8 flex flex-col items-center cursor-pointer hover:shadow-lg hover:border-blue-300 transition-all group relative"
+                  >
+                    <div className={`text-blue-600 mb-4 group-hover:scale-110 transition-transform ${category.iconType === 'emoji' ? '' : 'flex items-center justify-center'}`}>
+                      {category.icon}
+                    </div>
+                    <h3 className="text-xl font-semibold text-neutral-900 mb-4">{category.name}</h3>
+                    <button className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center hover:bg-blue-700 transition">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-          <p className="text-sm text-neutral-500 text-center">
-            More options will be coming soon...
-          </p>
+              <p className="text-sm text-neutral-500 text-center">
+                More options will be coming soon...
+              </p>
+            </>
+          )}
         </div>
       </section>
     </div>

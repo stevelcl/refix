@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { uploadImageToBlob } from "../azure";
 import StepEditor from "./StepEditor";
+import { ChevronRight } from "lucide-react";
 
 const initialForm = {
   title: "",
   category: "",
+  brand: "",
   model: "",
+  part: "",
+  relatedParts: [],
   difficulty: "Beginner",
   durationMinutes: "",
   summary: "",
@@ -21,6 +25,70 @@ const CreatorDashboardForm = ({ initialValues, onSubmit, editing, loading, categ
   const [form, setForm] = useState(initialForm);
   const [uploading, setUploading] = useState(false);
   const [file, setFile] = useState(null);
+  
+  // Cascading dropdown states
+  const [availableBrands, setAvailableBrands] = useState([]);
+  const [availableModels, setAvailableModels] = useState([]);
+  const [availableParts, setAvailableParts] = useState([]);
+  const [selectedRelatedParts, setSelectedRelatedParts] = useState([]);
+
+  // Load cascading dropdown data when category/brand/model changes
+  useEffect(() => {
+    if (form.category) {
+      const selectedCategory = categories.find(c => c.name === form.category);
+      if (selectedCategory && selectedCategory.subcategories) {
+        setAvailableBrands(selectedCategory.subcategories);
+        // Reset downstream selections if category changes
+        if (!editing || !initialValues?.brand) {
+          setForm(f => ({ ...f, brand: "", model: "", part: "", relatedParts: [] }));
+          setAvailableModels([]);
+          setAvailableParts([]);
+        }
+      } else {
+        setAvailableBrands([]);
+      }
+    } else {
+      setAvailableBrands([]);
+      setAvailableModels([]);
+      setAvailableParts([]);
+    }
+  }, [form.category, categories]);
+
+  useEffect(() => {
+    if (form.brand && availableBrands.length > 0) {
+      const selectedBrand = availableBrands.find(b => b.name === form.brand);
+      if (selectedBrand && selectedBrand.models) {
+        setAvailableModels(selectedBrand.models);
+        setAvailableParts(selectedBrand.parts || []);
+        // Reset downstream selections if brand changes
+        if (!editing || !initialValues?.model) {
+          setForm(f => ({ ...f, model: "", part: "", relatedParts: [] }));
+        }
+      } else {
+        setAvailableModels([]);
+        setAvailableParts([]);
+      }
+    } else {
+      setAvailableModels([]);
+      setAvailableParts([]);
+    }
+  }, [form.brand, availableBrands]);
+
+  useEffect(() => {
+    if (form.model && availableModels.length > 0) {
+      const selectedModel = availableModels.find(m => {
+        const modelName = typeof m === 'string' ? m : m.name;
+        return modelName === form.model;
+      });
+      if (selectedModel && typeof selectedModel === 'object' && selectedModel.parts) {
+        setAvailableParts(selectedModel.parts);
+      }
+      // Reset part selection if model changes
+      if (!editing || !initialValues?.part) {
+        setForm(f => ({ ...f, part: "", relatedParts: [] }));
+      }
+    }
+  }, [form.model, availableModels]);
 
   useEffect(() => {
     if (initialValues) {
@@ -52,11 +120,16 @@ const CreatorDashboardForm = ({ initialValues, onSubmit, editing, loading, categ
       setForm({
         ...initialForm,
         ...initialValues,
+        brand: initialValues.brand || "",
+        part: initialValues.part || "",
+        relatedParts: initialValues.relatedParts || [],
         tools: Array.isArray(initialValues.tools) ? initialValues.tools : (initialValues.tools || "").split("\n").filter(Boolean),
         steps: steps
       });
+      setSelectedRelatedParts(initialValues.relatedParts || []);
     } else {
       setForm(initialForm);
+      setSelectedRelatedParts([]);
     }
   }, [initialValues]);
 
@@ -73,6 +146,7 @@ const CreatorDashboardForm = ({ initialValues, onSubmit, editing, loading, categ
     e.preventDefault();
     const data = {
       ...form,
+      relatedParts: selectedRelatedParts,
       durationMinutes: Number(form.durationMinutes) || 0,
       steps: form.steps.map((step, index) => ({
         ...step,
@@ -80,6 +154,16 @@ const CreatorDashboardForm = ({ initialValues, onSubmit, editing, loading, categ
       }))
     };
     onSubmit(data);
+  };
+
+  const toggleRelatedPart = (part) => {
+    setSelectedRelatedParts(prev => {
+      if (prev.includes(part)) {
+        return prev.filter(p => p !== part);
+      } else {
+        return [...prev, part];
+      }
+    });
   };
 
   const handleFileChange = (e) => {
@@ -105,11 +189,25 @@ const CreatorDashboardForm = ({ initialValues, onSubmit, editing, loading, categ
     ? categories.map(c => ({ value: c.name, label: c.name }))
     : [{ value: "Phones", label: "Phones" }, { value: "Tablets", label: "Tablets" }, { value: "Laptops", label: "Laptops" }, { value: "Other", label: "Other" }];
 
+  // Breadcrumb display
+  const breadcrumb = [
+    form.category,
+    form.brand,
+    form.model,
+    form.part
+  ].filter(Boolean).join(" > ");
+
   return (
     <form className="bg-white rounded-2xl shadow-md p-8 flex flex-col gap-6 border border-neutral-100 max-w-5xl mx-auto" onSubmit={handleSubmit}>
       <div className="border-b border-neutral-200 pb-4">
           <h2 className="font-bold text-2xl text-neutral-900">{editing ? "Edit Guide" : "Create New Guide"}</h2>
         <p className="text-sm text-neutral-500 mt-1">Create detailed repair guides using the advanced step-by-step editor</p>
+        {breadcrumb && (
+          <div className="flex items-center gap-2 mt-3 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-900">
+            <span className="font-medium">Selected Path:</span>
+            <span>{breadcrumb}</span>
+          </div>
+        )}
       </div>
 
       {/* Basic Information */}
@@ -143,44 +241,129 @@ const CreatorDashboardForm = ({ initialValues, onSubmit, editing, loading, categ
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Cascading Dropdowns: Brand → Model → Part */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl border border-blue-200">
         <div>
-            <label className="block text-sm font-semibold text-neutral-700 mb-2">Model</label>
-          <input
-            type="text"
+          <label className="block text-sm font-semibold text-neutral-700 mb-2">
+            Brand / OS *
+          </label>
+          <select
+            name="brand"
+            value={form.brand}
+            onChange={handleChange}
+            disabled={!form.category || availableBrands.length === 0}
+            required
+            className="input disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <option value="">Select brand...</option>
+            {availableBrands.map(b => (
+              <option key={b.id} value={b.name}>{b.name}</option>
+            ))}
+          </select>
+          {form.category && availableBrands.length === 0 && (
+            <p className="text-xs text-neutral-500 mt-1">No brands available. Add brands in Category Management.</p>
+          )}
+        </div>
+
+        <div>
+          <label className="block text-sm font-semibold text-neutral-700 mb-2">
+            Model *
+          </label>
+          <select
             name="model"
             value={form.model}
             onChange={handleChange}
-            placeholder="e.g., iPhone 13 Pro Max"
+            disabled={!form.brand || availableModels.length === 0}
+            required
+            className="input disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <option value="">Select model...</option>
+            {availableModels.map((m, idx) => {
+              const modelName = typeof m === 'string' ? m : m.name;
+              return <option key={idx} value={modelName}>{modelName}</option>;
+            })}
+          </select>
+          {form.brand && availableModels.length === 0 && (
+            <p className="text-xs text-neutral-500 mt-1">No models available. Add models in Category Management.</p>
+          )}
+        </div>
+
+        <div>
+          <label className="block text-sm font-semibold text-neutral-700 mb-2">
+            Part *
+          </label>
+          <select
+            name="part"
+            value={form.part}
+            onChange={handleChange}
+            disabled={!form.model || availableParts.length === 0}
+            required
+            className="input disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <option value="">Select part...</option>
+            {availableParts.map((part, idx) => (
+              <option key={idx} value={part}>{part}</option>
+            ))}
+          </select>
+          {form.model && availableParts.length === 0 && (
+            <p className="text-xs text-neutral-500 mt-1">No parts available. Add parts in Category Management.</p>
+          )}
+        </div>
+      </div>
+
+      {/* Related Parts (optional multi-select) */}
+      {availableParts.length > 0 && form.part && (
+        <div className="p-4 bg-neutral-50 rounded-xl border border-neutral-200">
+          <label className="block text-sm font-semibold text-neutral-700 mb-2">
+            Related Parts (Optional)
+          </label>
+          <p className="text-xs text-neutral-500 mb-3">
+            Select additional parts that might be affected or useful during this repair
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {availableParts.filter(p => p !== form.part).map(part => (
+              <button
+                key={part}
+                type="button"
+                onClick={() => toggleRelatedPart(part)}
+                className={`px-3 py-1.5 rounded-full text-sm border-2 transition ${
+                  selectedRelatedParts.includes(part)
+                    ? "bg-purple-100 border-purple-400 text-purple-900 font-medium"
+                    : "bg-white border-neutral-300 text-neutral-700 hover:border-purple-300"
+                }`}
+              >
+                {part}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-semibold text-neutral-700 mb-2">Difficulty</label>
+          <select
+            name="difficulty"
+            value={form.difficulty}
+            onChange={handleChange}
+            className="input"
+          >
+            {DIFFICULTIES.map(d => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-semibold text-neutral-700 mb-2">Estimated Time (minutes)</label>
+          <input
+            type="number"
+            name="durationMinutes"
+            value={form.durationMinutes}
+            onChange={handleChange}
+            min="1"
+            placeholder="e.g., 30"
             className="input"
           />
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-              <label className="block text-sm font-semibold text-neutral-700 mb-2">Difficulty</label>
-            <select
-              name="difficulty"
-              value={form.difficulty}
-              onChange={handleChange}
-              className="input"
-            >
-              {DIFFICULTIES.map(d => (
-                <option key={d} value={d}>{d}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-neutral-700 mb-2">Estimated Time (minutes)</label>
-            <input
-              type="number"
-              name="durationMinutes"
-              value={form.durationMinutes}
-              onChange={handleChange}
-              min="1"
-              placeholder="e.g., 30"
-              className="input"
-            />
-          </div>
         </div>
       </div>
 

@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { listTutorials, createTutorial, updateTutorial, deleteTutorial, getCategories, updateCategories } from "../azure";
+import { listTutorials, createTutorial, updateTutorial, deleteTutorial, getCategories, updateCategories, getPublicCategories, createPublicCategory, updatePublicCategory, deletePublicCategory } from "../azure";
 import { useSite } from "../context/SiteContext";
 import CreatorDashboardForm from "../components/CreatorDashboardForm";
 import CreatorGuideTable from "../components/CreatorGuideTable";
 import CategoryManager from "../components/CategoryManager";
+import PublicCategoryManager from "../components/PublicCategoryManager";
 
 const CreatorDashboardPage = () => {
   const { isAdmin, isAuthenticated, user, login, logout, loading: authLoading } = useSite();
@@ -11,10 +12,11 @@ const CreatorDashboardPage = () => {
   const [password, setPassword] = useState("");
   const [allGuides, setAllGuides] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [publicCategories, setPublicCategories] = useState([]);
   const [editingGuide, setEditingGuide] = useState(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-  const [activeTab, setActiveTab] = useState("guides"); // "guides" or "categories"
+  const [activeTab, setActiveTab] = useState("guides"); // "guides", "categories", or "public-categories"
   const [loginLoading, setLoginLoading] = useState(false);
 
   const fetchGuides = useCallback(async () => {
@@ -33,13 +35,17 @@ const CreatorDashboardPage = () => {
       setCategories(cats || []);
     } catch (error) {
       console.error("Failed to fetch categories:", error);
-      // If categories API doesn't exist yet, use default structure
-      setCategories([
-        { id: "phones", name: "Phones", subcategories: [] },
-        { id: "laptops", name: "Laptops", subcategories: [] },
-        { id: "tablets", name: "Tablets", subcategories: [] },
-        { id: "other", name: "Other Devices", subcategories: [] }
-      ]);
+      setCategories([]);
+    }
+  }, []);
+
+  const fetchPublicCategories = useCallback(async () => {
+    try {
+      const cats = await getPublicCategories();
+      setPublicCategories(cats || []);
+    } catch (error) {
+      console.error("Failed to fetch public categories:", error);
+      setPublicCategories([]);
     }
   }, []);
 
@@ -47,8 +53,9 @@ const CreatorDashboardPage = () => {
     if (isAuthenticated && isAdmin) {
       fetchGuides();
       fetchCategories();
+      fetchPublicCategories();
     }
-  }, [isAuthenticated, isAdmin, fetchGuides, fetchCategories]);
+  }, [isAuthenticated, isAdmin, fetchGuides, fetchCategories, fetchPublicCategories]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -112,6 +119,27 @@ const CreatorDashboardPage = () => {
     } catch (error) {
       console.error("Failed to save categories:", error);
       setMessage("Categories save failed, but local cache updated");
+    }
+  };
+
+  const handlePublicCategoriesChange = async (action, data, id) => {
+    try {
+      if (action === 'create') {
+        const created = await createPublicCategory(data);
+        setPublicCategories([...publicCategories, created]);
+        setMessage("Public category created successfully!");
+      } else if (action === 'update') {
+        const updated = await updatePublicCategory(id, data);
+        setPublicCategories(publicCategories.map(c => c.id === id ? updated : c));
+        setMessage("Public category updated successfully!");
+      } else if (action === 'delete') {
+        await deletePublicCategory(id);
+        setPublicCategories(publicCategories.filter(c => c.id !== id));
+        setMessage("Public category deleted successfully!");
+      }
+    } catch (error) {
+      console.error("Failed to manage public category:", error);
+      throw error;
     }
   };
 
@@ -217,6 +245,16 @@ const CreatorDashboardPage = () => {
             >
               Category Management
             </button>
+            <button
+              onClick={() => setActiveTab("public-categories")}
+              className={`px-6 py-3 font-semibold transition border-b-2 ${
+                activeTab === "public-categories"
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-neutral-500 hover:text-neutral-700"
+              }`}
+            >
+              Public Page Categories
+            </button>
         </div>
 
         {/* Message */}
@@ -268,7 +306,15 @@ const CreatorDashboardPage = () => {
         {activeTab === "categories" && (
           <CategoryManager
             categories={categories}
-            onChange={handleCategoriesChange}
+            onCategoriesChange={handleCategoriesChange}
+          />
+        )}
+
+        {/* Public Categories Tab */}
+        {activeTab === "public-categories" && (
+          <PublicCategoryManager
+            categories={publicCategories}
+            onCategoriesChange={handlePublicCategoriesChange}
           />
         )}
       </div>

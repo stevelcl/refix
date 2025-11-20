@@ -102,7 +102,7 @@ const TutorialDetailPage = () => {
           </div>
         )}
         <TutorialStepList steps={data.steps} thumbnailUrl={data.thumbnailUrl} />
-      </div>
+          </div>
     </div>
   );
 };

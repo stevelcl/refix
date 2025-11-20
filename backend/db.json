@@ -11,6 +11,78 @@
     }
   ],
   "tutorials": [],
-  "categories": [],
-  "feedback": []
+  "categories": [
+    {
+      "id": "phones",
+      "name": "Phones",
+      "subcategories": [
+        {
+          "id": "sub-1763482052613",
+          "name": "ios",
+          "parts": [
+            "Screen",
+            "Battery",
+            "Charging Port",
+            "Loudspeaker",
+            "Microphone",
+            "Front Camera",
+            "Back Camera",
+            "Volume Buttons",
+            "Power Button",
+            "Back Glass",
+            "SIM Tray",
+            "Vibration Motor",
+            "Ear Speaker",
+            "Home Button",
+            "Face ID Module",
+            "Wireless Charging Coil"
+          ],
+          "models": []
+        }
+      ]
+    },
+    {
+      "id": "laptops",
+      "name": "Laptops",
+      "subcategories": []
+    },
+    {
+      "id": "other",
+      "name": "Other Devices",
+      "subcategories": []
+    }
+  ],
+  "feedback": [],
+  "publicCategories": [
+    {
+      "id": "pubcat-phone",
+      "name": "Phone",
+      "icon": "📱",
+      "path": "/device/phone",
+      "displayOrder": 1,
+      "parentId": null,
+      "createdAt": "2025-11-18T15:00:34.806Z",
+      "updatedAt": "2025-11-18T15:00:34.806Z"
+    },
+    {
+      "id": "pubcat-laptop",
+      "name": "PC / Laptop",
+      "icon": "💻",
+      "path": "/device/laptop",
+      "displayOrder": 2,
+      "parentId": null,
+      "createdAt": "2025-11-18T15:00:34.806Z",
+      "updatedAt": "2025-11-18T15:00:34.806Z"
+    },
+    {
+      "id": "pubcat-mac",
+      "name": "Mac",
+      "icon": "🖥️",
+      "path": "/device/more",
+      "displayOrder": 3,
+      "parentId": null,
+      "createdAt": "2025-11-18T15:00:34.806Z",
+      "updatedAt": "2025-11-18T15:00:34.806Z"
+    }
+  ]
 }

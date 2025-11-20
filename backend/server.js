@@ -158,8 +158,8 @@ app.post('/api/auth/register', async (req, res) => {
 // GET /api/tutorials
 app.get('/api/tutorials', async (req, res) => {
   try {
-    const { category, model, search } = req.query;
-    const filtered = await db.listTutorials({ category, model, search });
+    const { category, brand, model, part, search } = req.query;
+    const filtered = await db.listTutorials({ category, brand, model, part, search });
     res.json(filtered);
   } catch (error) {
     console.error('Get tutorials error:', error);
@@ -218,6 +218,130 @@ app.get('/api/categories', async (req, res) => {
   }
 });
 
+// GET /api/shared-parts - Get shared parts library for suggestions
+app.get('/api/shared-parts', (req, res) => {
+  res.json(getSharedPartsLibrary());
+});
+
+// GET /api/categories/:categoryName/brands - Get brands/subcategories for a category
+app.get('/api/categories/:categoryName/brands', async (req, res) => {
+  try {
+    const cats = await db.getCategories();
+    const category = cats.find(c => c.name.toLowerCase() === req.params.categoryName.toLowerCase());
+    
+    if (!category) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+    
+    res.json(category.subcategories || []);
+  } catch (error) {
+    console.error('Get brands error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/categories/:categoryName/brands/:brandName/models - Get models for a brand
+app.get('/api/categories/:categoryName/brands/:brandName/models', async (req, res) => {
+  try {
+    const cats = await db.getCategories();
+    const category = cats.find(c => c.name.toLowerCase() === req.params.categoryName.toLowerCase());
+    
+    if (!category) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+    
+    const brand = category.subcategories?.find(s => s.name.toLowerCase() === req.params.brandName.toLowerCase());
+    
+    if (!brand) {
+      return res.status(404).json({ error: 'Brand not found' });
+    }
+    
+    res.json(brand.models || []);
+  } catch (error) {
+    console.error('Get models error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/categories/:categoryName/brands/:brandName/models/:modelName/parts - Get parts for a model
+app.get('/api/categories/:categoryName/brands/:brandName/models/:modelName/parts', async (req, res) => {
+  try {
+    const cats = await db.getCategories();
+    const category = cats.find(c => c.name.toLowerCase() === req.params.categoryName.toLowerCase());
+    
+    if (!category) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+    
+    const brand = category.subcategories?.find(s => s.name.toLowerCase() === req.params.brandName.toLowerCase());
+    
+    if (!brand) {
+      return res.status(404).json({ error: 'Brand not found' });
+    }
+    
+    const model = brand.models?.find(m => {
+      const modelName = typeof m === 'string' ? m : m.name;
+      return modelName.toLowerCase() === req.params.modelName.toLowerCase();
+    });
+    
+    if (!model) {
+      return res.status(404).json({ error: 'Model not found' });
+    }
+    
+    // Return parts array from model or fallback to brand parts
+    const parts = typeof model === 'object' && model.parts ? model.parts : brand.parts || [];
+    res.json(parts);
+  } catch (error) {
+    console.error('Get parts error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/tutorials/by-part - Filter tutorials by full hierarchy
+app.get('/api/tutorials/by-part', async (req, res) => {
+  try {
+    const { category, brand, model, part } = req.query;
+    const tutorials = await db.listTutorials({});
+    
+    const filtered = tutorials.filter(t => {
+      if (category && t.category !== category) return false;
+      if (brand && t.brand !== brand) return false;
+      if (model && t.model !== model) return false;
+      if (part && t.part !== part) return false;
+      return true;
+    });
+    
+    res.json(filtered);
+  } catch (error) {
+    console.error('Get tutorials by part error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ==================== PUBLIC CATEGORY ENDPOINTS ====================
+
+// GET /api/public-categories
+app.get('/api/public-categories', async (req, res) => {
+  try {
+    const categories = await db.getPublicCategories();
+    res.json(categories);
+  } catch (error) {
+    console.error('Get public categories error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/public-categories/:parentId/subcategories
+app.get('/api/public-categories/:parentId/subcategories', async (req, res) => {
+  try {
+    const subcategories = await db.getPublicSubcategories(req.params.parentId);
+    res.json(subcategories);
+  } catch (error) {
+    console.error('Get public subcategories error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // ==================== ADMIN API ENDPOINTS ====================
 
 // POST /api/admin/tutorials
@@ -226,6 +350,9 @@ app.post('/api/admin/tutorials', authenticate, requireAdmin, async (req, res) =>
     const tutorial = {
       id: `tutorial-${Date.now()}`,
       ...req.body,
+      brand: req.body.brand || null,
+      part: req.body.part || null,
+      relatedParts: req.body.relatedParts || [],
       createdBy: req.user.id,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -242,7 +369,14 @@ app.post('/api/admin/tutorials', authenticate, requireAdmin, async (req, res) =>
 // PUT /api/admin/tutorials/:id
 app.put('/api/admin/tutorials/:id', authenticate, requireAdmin, async (req, res) => {
   try {
-    const updated = await db.updateTutorial(req.params.id, { ...req.body, updatedAt: new Date().toISOString() });
+    const updateData = {
+      ...req.body,
+      brand: req.body.brand || null,
+      part: req.body.part || null,
+      relatedParts: req.body.relatedParts || [],
+      updatedAt: new Date().toISOString()
+    };
+    const updated = await db.updateTutorial(req.params.id, updateData);
     if (!updated) {
       return res.status(404).json({ error: 'Tutorial not found' });
     }
@@ -301,6 +435,59 @@ app.put('/api/admin/categories', authenticate, requireAdmin, async (req, res) =>
   }
 });
 
+// POST /api/admin/public-categories
+app.post('/api/admin/public-categories', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const category = {
+      id: req.body.id || `pubcat-${Date.now()}`,
+      ...req.body,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    
+    const created = await db.createPublicCategory(category);
+    res.status(201).json(created);
+  } catch (error) {
+    console.error('Create public category error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/admin/public-categories/:id
+app.put('/api/admin/public-categories/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const updated = await db.updatePublicCategory(req.params.id, { 
+      ...req.body, 
+      updatedAt: new Date().toISOString() 
+    });
+    
+    if (!updated) {
+      return res.status(404).json({ error: 'Public category not found' });
+    }
+    
+    res.json(updated);
+  } catch (error) {
+    console.error('Update public category error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/admin/public-categories/:id
+app.delete('/api/admin/public-categories/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const existing = await db.getPublicCategoryById(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Public category not found' });
+    }
+    
+    await db.deletePublicCategory(req.params.id);
+    res.status(204).send();
+  } catch (error) {
+    console.error('Delete public category error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // ==================== INITIALIZATION ====================
 
 // Initialize admin account on startup
@@ -327,10 +514,288 @@ async function initializeAdmin() {
   }
 }
 
+// Migrate existing tutorials to include brand and part fields
+async function migrateTutorials() {
+  try {
+    const tutorials = await db.listTutorials({});
+    const needsMigration = tutorials.filter(t => !t.migrated && (!t.brand || !t.part));
+    
+    if (needsMigration.length === 0) {
+      return;
+    }
+    
+    console.log(`🔄 Migrating ${needsMigration.length} tutorials...`);
+    
+    const categories = await db.getCategories();
+    
+    for (const tutorial of needsMigration) {
+      // Find category
+      const category = categories.find(c => c.name === tutorial.category);
+      if (!category) continue;
+      
+      // Try to extract brand and part from title or model
+      let brand = tutorial.brand;
+      let part = tutorial.part;
+      let relatedParts = tutorial.relatedParts || [];
+      
+      // Attempt to find brand from model
+      if (!brand && tutorial.model) {
+        const subcategory = category.subcategories?.find(sub => {
+          const models = sub.models || [];
+          return models.some(m => {
+            const modelName = typeof m === 'string' ? m : m.name;
+            return modelName === tutorial.model;
+          });
+        });
+        if (subcategory) {
+          brand = subcategory.name;
+        }
+      }
+      
+      // Attempt to extract part from title (e.g., "iPhone 13 Screen Replacement" -> "Screen")
+      if (!part && tutorial.title) {
+        const title = tutorial.title.toLowerCase();
+        const allParts = [...new Set(Object.values(SHARED_PARTS_LIBRARY).flat())];
+        
+        for (const possiblePart of allParts) {
+          if (title.includes(possiblePart.toLowerCase())) {
+            part = possiblePart;
+            break;
+          }
+        }
+      }
+      
+      // Update tutorial with migrated data
+      await db.updateTutorial(tutorial.id, {
+        brand: brand || 'Unknown',
+        part: part || 'General',
+        relatedParts,
+        migrated: true
+      });
+    }
+    
+    console.log('✅ Tutorial migration completed');
+  } catch (error) {
+    console.error('⚠️  Tutorial migration failed:', error.message);
+  }
+}
+
+// Initialize default public categories if none exist
+async function initializePublicCategories() {
+  const existing = await db.getPublicCategories();
+  
+  if (existing.length === 0) {
+    console.log('📂 Initializing default public categories...');
+    const defaultCategories = [
+      {
+        id: 'pubcat-phone',
+        name: 'Phone',
+        icon: '📱',
+        path: '/device/phone',
+        displayOrder: 1,
+        parentId: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      {
+        id: 'pubcat-laptop',
+        name: 'PC / Laptop',
+        icon: '💻',
+        path: '/device/laptop',
+        displayOrder: 2,
+        parentId: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      {
+        id: 'pubcat-mac',
+        name: 'Mac',
+        icon: '🖥️',
+        path: '/device/more',
+        displayOrder: 3,
+        parentId: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ];
+    
+    for (const category of defaultCategories) {
+      await db.createPublicCategory(category);
+    }
+    console.log('✅ Default public categories created');
+  }
+}
+
+// Shared parts library - common parts across all devices
+const SHARED_PARTS_LIBRARY = {
+  phones: [
+    'Screen', 'Battery', 'Charging Port', 'Loudspeaker', 'Microphone', 
+    'Front Camera', 'Back Camera', 'Volume Buttons', 'Power Button', 
+    'Back Glass', 'SIM Tray', 'Vibration Motor', 'Ear Speaker', 
+    'Home Button', 'Face ID Module', 'Wireless Charging Coil'
+  ],
+  laptops: [
+    'Screen', 'Battery', 'Keyboard', 'Trackpad', 'Hard Drive/SSD', 
+    'RAM', 'Wi-Fi Card', 'Fan', 'Charging Port', 'Hinges', 
+    'Motherboard', 'Thermal Paste', 'Webcam', 'Speakers'
+  ],
+  tablets: [
+    'Screen', 'Battery', 'Charging Port', 'Front Camera', 'Back Camera', 
+    'Buttons', 'Back Panel', 'Speakers', 'Microphone', 'Home Button'
+  ],
+  other: [
+    'Screen', 'Battery', 'Charging Port', 'Controller', 'HDMI Port', 
+    'Buttons', 'Fan', 'Power Supply', 'Hard Drive'
+  ]
+};
+
+// Initialize default tutorial categories if none exist
+async function initializeTutorialCategories() {
+  const existing = await db.getCategories();
+  
+  if (existing.length === 0) {
+    console.log('📚 Initializing default tutorial categories...');
+    
+    const phoneParts = SHARED_PARTS_LIBRARY.phones;
+    const laptopParts = SHARED_PARTS_LIBRARY.laptops;
+    const tabletParts = SHARED_PARTS_LIBRARY.tablets;
+    const otherParts = SHARED_PARTS_LIBRARY.other;
+    
+    const defaultCategories = [
+      {
+        id: 'cat-phones',
+        name: 'Phones',
+        subcategories: [
+          {
+            id: 'sub-iphone',
+            name: 'iPhone',
+            parts: [...phoneParts],
+            models: [
+              { name: 'iPhone 13', parts: [...phoneParts] },
+              { name: 'iPhone 13 Pro', parts: [...phoneParts] },
+              { name: 'iPhone 13 Pro Max', parts: [...phoneParts] },
+              { name: 'iPhone 14', parts: [...phoneParts] },
+              { name: 'iPhone 14 Pro', parts: [...phoneParts] },
+              { name: 'iPhone 14 Pro Max', parts: [...phoneParts] },
+              { name: 'iPhone 15', parts: [...phoneParts] },
+              { name: 'iPhone 15 Pro', parts: [...phoneParts] },
+              { name: 'iPhone 15 Pro Max', parts: [...phoneParts] }
+            ]
+          },
+          {
+            id: 'sub-android',
+            name: 'Android',
+            parts: [...phoneParts],
+            models: [
+              { name: 'Samsung Galaxy S22', parts: [...phoneParts] },
+              { name: 'Samsung Galaxy S23', parts: [...phoneParts] },
+              { name: 'Google Pixel 7', parts: [...phoneParts] },
+              { name: 'Google Pixel 8', parts: [...phoneParts] },
+              { name: 'OnePlus 11', parts: [...phoneParts] }
+            ]
+          }
+        ]
+      },
+      {
+        id: 'cat-laptops',
+        name: 'Laptops',
+        subcategories: [
+          {
+            id: 'sub-windows',
+            name: 'Windows Laptops',
+            parts: [...laptopParts],
+            models: [
+              { name: 'Dell XPS', parts: [...laptopParts] },
+              { name: 'HP Pavilion', parts: [...laptopParts] },
+              { name: 'Lenovo ThinkPad', parts: [...laptopParts] },
+              { name: 'ASUS ZenBook', parts: [...laptopParts] }
+            ]
+          },
+          {
+            id: 'sub-macbook',
+            name: 'MacBook',
+            parts: [...laptopParts],
+            models: [
+              { name: 'MacBook Air M1', parts: [...laptopParts] },
+              { name: 'MacBook Air M2', parts: [...laptopParts] },
+              { name: 'MacBook Pro 13"', parts: [...laptopParts] },
+              { name: 'MacBook Pro 14"', parts: [...laptopParts] },
+              { name: 'MacBook Pro 16"', parts: [...laptopParts] }
+            ]
+          }
+        ]
+      },
+      {
+        id: 'cat-tablets',
+        name: 'Tablets',
+        subcategories: [
+          {
+            id: 'sub-ipad',
+            name: 'iPad',
+            parts: [...tabletParts],
+            models: [
+              { name: 'iPad 9th Gen', parts: [...tabletParts] },
+              { name: 'iPad 10th Gen', parts: [...tabletParts] },
+              { name: 'iPad Air', parts: [...tabletParts] },
+              { name: 'iPad Pro 11"', parts: [...tabletParts] },
+              { name: 'iPad Pro 12.9"', parts: [...tabletParts] }
+            ]
+          },
+          {
+            id: 'sub-android-tablets',
+            name: 'Android Tablets',
+            parts: [...tabletParts],
+            models: [
+              { name: 'Samsung Galaxy Tab', parts: [...tabletParts] },
+              { name: 'Amazon Fire HD', parts: [...tabletParts] }
+            ]
+          }
+        ]
+      },
+      {
+        id: 'cat-other',
+        name: 'Other Devices',
+        subcategories: [
+          {
+            id: 'sub-gaming',
+            name: 'Gaming Consoles',
+            parts: [...otherParts],
+            models: [
+              { name: 'PlayStation 5', parts: [...otherParts] },
+              { name: 'Xbox Series X', parts: [...otherParts] },
+              { name: 'Nintendo Switch', parts: [...otherParts] }
+            ]
+          },
+          {
+            id: 'sub-wearables',
+            name: 'Wearables',
+            parts: ['Screen', 'Battery', 'Charging Port', 'Buttons', 'Heart Rate Sensor', 'Strap'],
+            models: [
+              { name: 'Apple Watch', parts: ['Screen', 'Battery', 'Charging Port', 'Digital Crown', 'Heart Rate Sensor', 'Strap'] },
+              { name: 'Samsung Galaxy Watch', parts: ['Screen', 'Battery', 'Charging Port', 'Buttons', 'Heart Rate Sensor', 'Strap'] }
+            ]
+          }
+        ]
+      }
+    ];
+    
+    await db.setCategories(defaultCategories);
+    console.log('✅ Default tutorial categories created with parts');
+  }
+}
+
+// Get shared parts library for suggestions
+function getSharedPartsLibrary() {
+  return SHARED_PARTS_LIBRARY;
+}
+
 // Start server
 async function startServer() {
   await db.init();
   await initializeAdmin();
+  await initializePublicCategories();
+  await initializeTutorialCategories();
+  await migrateTutorials();
   
   app.listen(PORT, () => {
     console.log('\n🚀 Backend server started!');
