@@ -16,7 +16,8 @@ import LaptopBrandPage from "./pages/LaptopBrandPage";
 import MoreDevicesPage from "./pages/MoreDevicesPage";
 import BrandModelsPage from "./pages/BrandModelsPage";
 import PartTutorialsPage from "./pages/PartTutorialsPage";
-import ShopPage from "./pages/ShopPage";
+import StoreCategoriesPage from "./pages/ShopPage";
+import StoreProductsPage from "./pages/StoreProductsPage";
 
 const App = () => (
   <div className="bg-[#f9fafe] min-h-screen flex flex-col">
@@ -38,7 +39,8 @@ const App = () => (
         <Route path="/device/more" element={<MoreDevicesPage />} />
         
         {/* Shop / Spare Parts Store */}
-        <Route path="/shop" element={<ShopPage />} />
+        <Route path="/store/categories" element={<StoreCategoriesPage />} />
+        <Route path="/store/products/:category" element={<StoreProductsPage />} />
         
         {/* Tutorial Routes */}
         <Route path="/tutorials" element={<TutorialsPage />} />

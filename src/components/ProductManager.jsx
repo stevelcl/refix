@@ -8,7 +8,8 @@ export default function ProductManager() {
     name: '',
     price: '',
     description: '',
-    imageUrl: null
+    imageUrl: null,
+    category: 'Android Parts'
   });
   const [uploadingImage, setUploadingImage] = useState(false);
   const [message, setMessage] = useState('');
@@ -43,7 +44,7 @@ export default function ProductManager() {
   };
 
   const handleAddProduct = async () => {
-    if (!newProduct.name.trim() || !newProduct.price || !newProduct.description.trim()) {
+    if (!newProduct.name.trim() || !newProduct.price || !newProduct.description.trim() || !newProduct.category) {
       setMessage('Please fill in all fields');
       return;
     }
@@ -52,7 +53,7 @@ export default function ProductManager() {
     try {
       const created = await createProduct(newProduct);
       setProducts([created, ...products]);
-      setNewProduct({ name: '', price: '', description: '', imageUrl: null });
+      setNewProduct({ name: '', price: '', description: '', imageUrl: null, category: 'Android Parts' });
       setMessage('Product created successfully!');
       setTimeout(() => setMessage(''), 3000);
     } catch (error) {
@@ -110,17 +111,30 @@ export default function ProductManager() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Product Image</label>
-                <label className="flex items-center gap-2 cursor-pointer text-blue-600 hover:text-blue-800">
-                  {uploadingImage ? 'Uploading...' : 'Upload Image'}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => handleImageUpload(e.target.files[0])}
-                  />
-                </label>
+                <label className="block text-sm font-medium mb-1">Category</label>
+                <select
+                  value={newProduct.category}
+                  onChange={(e) => setNewProduct({ ...newProduct, category: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                >
+                  <option value="Android Parts">Android Parts</option>
+                  <option value="iPhone Parts">iPhone Parts</option>
+                  <option value="Laptop Parts">Laptop Parts</option>
+                  <option value="Mac Parts">Mac Parts</option>
+                </select>
               </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Product Image</label>
+              <label className="flex items-center gap-2 cursor-pointer text-blue-600 hover:text-blue-800">
+                {uploadingImage ? 'Uploading...' : 'Upload Image'}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => handleImageUpload(e.target.files[0])}
+                />
+              </label>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">Description</label>
@@ -169,6 +183,7 @@ export default function ProductManager() {
                     <img src={product.imageUrl} alt={product.name} className="w-full h-32 object-cover rounded mb-3" />
                   )}
                   <h4 className="font-semibold text-lg mb-1">{product.name}</h4>
+                  <p className="text-sm text-gray-500 mb-1">{product.category}</p>
                   <p className="text-blue-600 font-bold mb-2">RM {product.price.toFixed(2)}</p>
                   <p className="text-gray-600 text-sm mb-3">{product.description}</p>
                   <button

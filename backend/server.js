@@ -232,10 +232,15 @@ app.get('/api/products/:id', async (req, res) => {
 // POST /api/admin/products - Create a new product (admin only)
 app.post('/api/admin/products', authenticate, requireAdmin, async (req, res) => {
   try {
-    const { name, price, description, imageUrl } = req.body;
+    const { name, price, description, imageUrl, category } = req.body;
     
     if (!name || price === undefined || !description) {
       return res.status(400).json({ error: 'Name, price, and description are required' });
+    }
+
+    const validCategories = ['Android Parts', 'iPhone Parts', 'Laptop Parts', 'Mac Parts'];
+    if (category && !validCategories.includes(category)) {
+      return res.status(400).json({ error: `Invalid category. Must be one of: ${validCategories.join(', ')}` });
     }
     
     const product = {
@@ -244,6 +249,7 @@ app.post('/api/admin/products', authenticate, requireAdmin, async (req, res) => 
       price: parseFloat(price),
       description,
       imageUrl: imageUrl || null,
+      category: category || 'Android Parts',
       createdBy: req.user.id,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
