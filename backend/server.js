@@ -281,7 +281,10 @@ app.get('/api/categories/:categoryName/brands/:brandName/models/:modelName/parts
     
     const model = brand.models?.find(m => {
       const modelName = typeof m === 'string' ? m : m.name;
-      return modelName.toLowerCase() === req.params.modelName.toLowerCase();
+      const requested = (req.params.modelName || '').toString().toLowerCase();
+      const normalize = (s) => s.toString().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      // Match either by exact lowercased name or by a slugified form so routes can use slugs
+      return modelName.toLowerCase() === requested || normalize(modelName) === requested;
     });
     
     if (!model) {
@@ -320,18 +323,38 @@ app.get('/api/tutorials/by-part', async (req, res) => {
 
 // ==================== PUBLIC CATEGORY ENDPOINTS ====================
 
-// GET /api/public-categories
+// GET /api/public-categories - Returns top-level categories marked for public display
 app.get('/api/public-categories', async (req, res) => {
   try {
-    const categories = await db.getPublicCategories();
-    res.json(categories);
+    // Get all categories and filter to top-level ones marked as public
+    const allCategories = await db.getCategories();
+    
+    // Filter to public categories (or return all if none are explicitly marked)
+    const publicCats = allCategories.filter(c => c.isPublic !== false);
+    
+    // Sort by displayOrder and map to public-friendly format
+    const publicView = publicCats
+      .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
+      .map(c => ({
+        id: c.id,
+        name: c.name,
+        icon: c.icon || '📁',
+        path: c.path || `/device/${(c.id || c.name || '').toString().toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+        displayOrder: c.displayOrder || 0,
+        parentId: c.parentId || null,
+        imageUrl: c.imageUrl || null,
+        createdAt: c.createdAt,
+        updatedAt: c.updatedAt
+      }));
+    
+    res.json(publicView);
   } catch (error) {
     console.error('Get public categories error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// GET /api/public-categories/:parentId/subcategories
+// GET /api/public-categories/:parentId/subcategories - Deprecated: use /categories/:categoryName/brands instead
 app.get('/api/public-categories/:parentId/subcategories', async (req, res) => {
   try {
     const subcategories = await db.getPublicSubcategories(req.params.parentId);
@@ -435,35 +458,55 @@ app.put('/api/admin/categories', authenticate, requireAdmin, async (req, res) =>
   }
 });
 
-// POST /api/admin/public-categories
+// POST /api/admin/public-categories - Create a new top-level public category
 app.post('/api/admin/public-categories', authenticate, requireAdmin, async (req, res) => {
   try {
+    const allCategories = await db.getCategories();
+    
     const category = {
-      id: req.body.id || `pubcat-${Date.now()}`,
-      ...req.body,
+      id: req.body.id || `cat-${Date.now()}`,
+      name: req.body.name,
+      icon: req.body.icon || '📁',
+      path: req.body.path || `/device/${(req.body.id || req.body.name || '').toString().toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+      displayOrder: req.body.displayOrder !== undefined ? req.body.displayOrder : (allCategories.length + 1),
+      isPublic: true,
+      subcategories: [],
+      imageUrl: req.body.imageUrl || null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
     
-    const created = await db.createPublicCategory(category);
-    res.status(201).json(created);
+    const updated = await db.setCategories([...allCategories, category]);
+    res.status(201).json(category);
   } catch (error) {
     console.error('Create public category error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// PUT /api/admin/public-categories/:id
+// PUT /api/admin/public-categories/:id - Update public fields of a category
 app.put('/api/admin/public-categories/:id', authenticate, requireAdmin, async (req, res) => {
   try {
-    const updated = await db.updatePublicCategory(req.params.id, { 
-      ...req.body, 
-      updatedAt: new Date().toISOString() 
-    });
+    const allCategories = await db.getCategories();
+    const idx = allCategories.findIndex(c => c.id === req.params.id);
     
-    if (!updated) {
-      return res.status(404).json({ error: 'Public category not found' });
+    if (idx === -1) {
+      return res.status(404).json({ error: 'Category not found' });
     }
+    
+    const updated = {
+      ...allCategories[idx],
+      name: req.body.name !== undefined ? req.body.name : allCategories[idx].name,
+      icon: req.body.icon !== undefined ? req.body.icon : (allCategories[idx].icon || '📁'),
+      path: req.body.path !== undefined ? req.body.path : allCategories[idx].path,
+      displayOrder: req.body.displayOrder !== undefined ? req.body.displayOrder : allCategories[idx].displayOrder,
+      imageUrl: req.body.imageUrl !== undefined ? req.body.imageUrl : allCategories[idx].imageUrl,
+      isPublic: req.body.isPublic !== undefined ? req.body.isPublic : true,
+      updatedAt: new Date().toISOString()
+    };
+    
+    allCategories[idx] = updated;
+    await db.setCategories(allCategories);
     
     res.json(updated);
   } catch (error) {
@@ -472,15 +515,19 @@ app.put('/api/admin/public-categories/:id', authenticate, requireAdmin, async (r
   }
 });
 
-// DELETE /api/admin/public-categories/:id
+// DELETE /api/admin/public-categories/:id - Delete a top-level category
 app.delete('/api/admin/public-categories/:id', authenticate, requireAdmin, async (req, res) => {
   try {
-    const existing = await db.getPublicCategoryById(req.params.id);
-    if (!existing) {
-      return res.status(404).json({ error: 'Public category not found' });
+    const allCategories = await db.getCategories();
+    const idx = allCategories.findIndex(c => c.id === req.params.id);
+    
+    if (idx === -1) {
+      return res.status(404).json({ error: 'Category not found' });
     }
     
-    await db.deletePublicCategory(req.params.id);
+    const filtered = allCategories.filter(c => c.id !== req.params.id);
+    await db.setCategories(filtered);
+    
     res.status(204).send();
   } catch (error) {
     console.error('Delete public category error:', error);
@@ -620,7 +667,11 @@ async function initializePublicCategories() {
     ];
     
     for (const category of defaultCategories) {
-      await db.createPublicCategory(category);
+      try {
+        await db.createPublicCategory(category);
+      } catch (err) {
+        console.warn('⚠️  Skipping creation of default public category (already exists or error):', category.id, err.message || err);
+      }
     }
     console.log('✅ Default public categories created');
   }
@@ -795,6 +846,7 @@ async function startServer() {
   await initializeAdmin();
   await initializePublicCategories();
   await initializeTutorialCategories();
+  await db.migratePublicCategoriesToCategories();
   await migrateTutorials();
   
   app.listen(PORT, () => {

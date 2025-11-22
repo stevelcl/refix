@@ -1,0 +1,79 @@
+{
+  "users": [
+    {
+      "id": "admin-user-001",
+      "username": "admin",
+      "email": "admin@refix.com",
+      "passwordHash": "$2b$10$/bTWuZVw0geFqCqMdnbDxe5UkSlaxkMY.DYtzMgwiBcA4VmuTJDfi",
+      "role": "admin",
+      "createdAt": "2025-11-15T05:25:25.603Z",
+      "updatedAt": "2025-11-15T05:25:25.603Z"
+    }
+  ],
+  "tutorials": [],
+  "categories": [
+    {
+      "id": "phones",
+      "name": "Phones",
+      "subcategories": [
+        {
+          "id": "sub-1763482052613",
+          "name": "ios",
+          "parts": [
+            "Screen",
+            "Battery",
+            "Charging Port",
+            "Loudspeaker",
+            "Microphone",
+            "Front Camera",
+            "Back Camera",
+            "Volume Buttons",
+            "Power Button",
+            "Back Glass",
+            "SIM Tray",
+            "Vibration Motor",
+            "Ear Speaker",
+            "Home Button",
+            "Face ID Module",
+            "Wireless Charging Coil"
+          ],
+          "models": []
+        }
+      ]
+    },
+    {
+      "id": "laptops",
+      "name": "Laptops",
+      "subcategories": []
+    },
+    {
+      "id": "other",
+      "name": "Other Devices",
+      "subcategories": []
+    },
+    {
+      "id": "test-cat-1763783558156",
+      "name": "Test Category",
+      "icon": "🎯",
+      "path": "/test/category",
+      "displayOrder": 1,
+      "isPublic": true,
+      "subcategories": [],
+      "createdAt": "2025-11-22T03:52:38.156Z",
+      "updatedAt": "2025-11-22T03:52:38.156Z"
+    }
+  ],
+  "feedback": [],
+  "publicCategories": [
+    {
+      "id": "pubcat-phone",
+      "name": "Phone",
+      "icon": "📱",
+      "path": "/device/phone",
+      "displayOrder": 1,
+      "parentId": null,
+      "createdAt": "2025-11-18T15:00:34.806Z",
+      "updatedAt": "2025-11-18T15:00:34.806Z"
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { uploadImageToBlob } from '../azure';
+import { uploadImageToBlob, updateCategories } from '../azure';
 
 export default function CategoryManager({ categories, onCategoriesChange }) {
   const [expandedCategories, setExpandedCategories] = useState({});
@@ -12,6 +12,15 @@ export default function CategoryManager({ categories, onCategoriesChange }) {
   const [sharedParts, setSharedParts] = useState([]);
   const [editingSubcategory, setEditingSubcategory] = useState(null);
   const [uploadingImage, setUploadingImage] = useState(null);
+  const [newCategoryPublicFields, setNewCategoryPublicFields] = useState({
+    icon: '📁',
+    path: '',
+    displayOrder: 0,
+    imageUrl: null
+  });
+  const [editingCategoryPublic, setEditingCategoryPublic] = useState(null);
+  const [editCategoryPublicFields, setEditCategoryPublicFields] = useState({});
+  const [uploadingCategoryImage, setUploadingCategoryImage] = useState(null);
 
   useEffect(() => {
     fetchSharedParts();
@@ -69,6 +78,34 @@ export default function CategoryManager({ categories, onCategoriesChange }) {
       alert('Failed to upload image');
     } finally {
       setUploadingImage(null);
+    }
+  };
+
+  const handleCategoryImageUploadNew = async (file) => {
+    if (!file) return;
+    setUploadingCategoryImage('new');
+    try {
+      const imageUrl = await uploadImageToBlob(file, 'category-images');
+      setNewCategoryPublicFields({ ...newCategoryPublicFields, imageUrl });
+    } catch (error) {
+      console.error('Failed to upload category image:', error);
+      alert('Failed to upload image');
+    } finally {
+      setUploadingCategoryImage(null);
+    }
+  };
+
+  const handleCategoryImageUploadEdit = async (categoryId, file) => {
+    if (!file) return;
+    setUploadingCategoryImage(categoryId);
+    try {
+      const imageUrl = await uploadImageToBlob(file, 'category-images');
+      setEditCategoryPublicFields({ ...editCategoryPublicFields, imageUrl });
+    } catch (error) {
+      console.error('Failed to upload category image:', error);
+      alert('Failed to upload image');
+    } finally {
+      setUploadingCategoryImage(null);
     }
   };
 
@@ -154,13 +191,21 @@ export default function CategoryManager({ categories, onCategoriesChange }) {
 
   const handleAddCategory = () => {
     if (!newCategoryName.trim()) return;
+    const id = newCategoryName.toLowerCase().replace(/\s+/g, '-');
     const newCategory = {
-      id: newCategoryName.toLowerCase().replace(/\s+/g, '-'),
+      id,
       name: newCategoryName,
-      subcategories: []
+      subcategories: [],
+      // Public fields for UI navigation
+      icon: newCategoryPublicFields.icon || '📁',
+      path: newCategoryPublicFields.path || `/device/${id}`,
+      displayOrder: parseInt(newCategoryPublicFields.displayOrder) || 0,
+      imageUrl: newCategoryPublicFields.imageUrl || null,
+      isPublic: true
     };
     onCategoriesChange([...categories, newCategory]);
     setNewCategoryName('');
+    setNewCategoryPublicFields({ icon: '📁', path: '', displayOrder: 0 });
   };
 
   const handleAddSubcategory = (categoryId) => {
@@ -209,9 +254,55 @@ export default function CategoryManager({ categories, onCategoriesChange }) {
     setNewModelName({ ...newModelName, [`${categoryId}-${subcategoryId}`]: '' });
   };
 
+  const handleModelImageUpload = async (categoryId, subcategoryId, modelName, file) => {
+    if (!file) return;
+    const key = `${categoryId}-${subcategoryId}-${modelName}`;
+    setUploadingImage(key);
+    try {
+      const imageUrl = await uploadImageToBlob(file, 'model-images');
+
+      const updatedCategories = categories.map(cat => {
+        if (cat.id !== categoryId) return cat;
+        return {
+          ...cat,
+          subcategories: cat.subcategories.map(sub => {
+            if (sub.id !== subcategoryId) return sub;
+            return {
+              ...sub,
+              models: (sub.models || []).map(m => {
+                const currentModelName = typeof m === 'string' ? m : m.name;
+                if (currentModelName !== modelName) return m;
+                if (typeof m === 'string') return { name: m, parts: [], imageUrl };
+                return { ...m, imageUrl };
+              })
+            };
+          })
+        };
+      });
+
+      onCategoriesChange(updatedCategories);
+    } catch (error) {
+      console.error('Failed to upload model image:', error);
+      alert('Failed to upload image');
+    } finally {
+      setUploadingImage(null);
+    }
+  };
+
   const handleDeleteCategory = (categoryId) => {
     if (!confirm('Delete this category and all its subcategories/models?')) return;
-    onCategoriesChange(categories.filter(cat => cat.id !== categoryId));
+    const updated = categories.filter(cat => cat.id !== categoryId);
+    // Update local state immediately
+    onCategoriesChange(updated);
+    // Persist change immediately; parent will also attempt to persist but do a best-effort save here
+    (async () => {
+      try {
+        await updateCategories(updated);
+      } catch (err) {
+        console.error('Failed to persist category deletion:', err);
+        alert('Warning: Failed to persist deletion to the backend. The change is local only. Please ensure you are logged in and try saving again.');
+      }
+    })();
   };
 
   const handleDeleteSubcategory = (categoryId, subcategoryId) => {
@@ -226,6 +317,14 @@ export default function CategoryManager({ categories, onCategoriesChange }) {
       return cat;
     });
     onCategoriesChange(updatedCategories);
+    (async () => {
+      try {
+        await updateCategories(updatedCategories);
+      } catch (err) {
+        console.error('Failed to persist subcategory deletion:', err);
+        alert('Warning: Failed to persist deletion to the backend. The change is local only. Please ensure you are logged in and try saving again.');
+      }
+    })();
   };
 
   const handleDeleteModel = (categoryId, subcategoryId, modelName) => {
@@ -238,7 +337,10 @@ export default function CategoryManager({ categories, onCategoriesChange }) {
             if (sub.id === subcategoryId) {
               return {
                 ...sub,
-                models: (sub.models || []).filter(m => m.name !== modelName)
+                models: (sub.models || []).filter(m => {
+                  const name = typeof m === 'string' ? m : m.name;
+                  return name !== modelName;
+                })
               };
             }
             return sub;
@@ -248,6 +350,14 @@ export default function CategoryManager({ categories, onCategoriesChange }) {
       return cat;
     });
     onCategoriesChange(updatedCategories);
+    (async () => {
+      try {
+        await updateCategories(updatedCategories);
+      } catch (err) {
+        console.error('Failed to persist model deletion:', err);
+        alert('Warning: Failed to persist deletion to the backend. The change is local only. Please ensure you are logged in and try saving again.');
+      }
+    })();
   };
 
   const toggleCategory = (categoryId) => {
@@ -265,21 +375,70 @@ export default function CategoryManager({ categories, onCategoriesChange }) {
         <p className="text-gray-600 mb-6">Manage repair guide categories, brands, models, and parts</p>
 
         {/* Add Category */}
-        <div className="mb-6 flex gap-2">
-          <input
-            type="text"
-            placeholder="New category name..."
-            value={newCategoryName}
-            onChange={(e) => setNewCategoryName(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleAddCategory()}
-            className="flex-1 border rounded px-3 py-2"
-          />
-          <button
-            onClick={handleAddCategory}
-            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-          >
-            Add Category
-          </button>
+        <div className="mb-6">
+          <div className="flex gap-2 mb-3">
+            <input
+              type="text"
+              placeholder="New category name..."
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleAddCategory()}
+              className="flex-1 border rounded px-3 py-2"
+            />
+            <button
+              onClick={handleAddCategory}
+              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+            >
+              Add Category
+            </button>
+          </div>
+          
+          {newCategoryName && (
+            <div className="bg-blue-50 border border-blue-200 rounded p-3 space-y-2">
+              <p className="text-sm font-semibold text-blue-900">Public Appearance (Optional)</p>
+              <div className="grid grid-cols-3 gap-2">
+                <input
+                  type="text"
+                  placeholder="Icon (e.g., 📱)"
+                  maxLength="2"
+                  value={newCategoryPublicFields.icon}
+                  onChange={(e) => setNewCategoryPublicFields({...newCategoryPublicFields, icon: e.target.value})}
+                  className="border rounded px-2 py-1 text-sm"
+                />
+                <input
+                  type="text"
+                  placeholder="Path (e.g., /device/phones)"
+                  value={newCategoryPublicFields.path}
+                  onChange={(e) => setNewCategoryPublicFields({...newCategoryPublicFields, path: e.target.value})}
+                  className="border rounded px-2 py-1 text-sm"
+                />
+                <input
+                  type="number"
+                  placeholder="Display Order"
+                  value={newCategoryPublicFields.displayOrder}
+                  onChange={(e) => setNewCategoryPublicFields({...newCategoryPublicFields, displayOrder: e.target.value})}
+                  className="border rounded px-2 py-1 text-sm"
+                />
+              </div>
+              <div className="mt-2">
+                <label className="text-sm font-medium">Category Image (optional)</label>
+                <div className="flex items-center gap-3 mt-2">
+                  {newCategoryPublicFields.imageUrl && (
+                    <img src={newCategoryPublicFields.imageUrl} alt="category" className="w-12 h-12 object-cover rounded" />
+                  )}
+                  <label className="cursor-pointer text-blue-600 hover:text-blue-800 text-sm">
+                    {uploadingCategoryImage === 'new' ? 'Uploading...' : 'Upload Image'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => handleCategoryImageUploadNew(e.target.files[0])}
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Categories List */}
@@ -287,20 +446,135 @@ export default function CategoryManager({ categories, onCategoriesChange }) {
           {categories.map(category => (
             <div key={category.id} className="border rounded-lg">
               <div className="flex items-center justify-between p-4 bg-gray-50 cursor-pointer hover:bg-gray-100" onClick={() => toggleCategory(category.id)}>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                   <span className="text-xl">{expandedCategories[category.id] ? '▼' : '▶'}</span>
-                  <h3 className="font-bold text-lg">{category.name}</h3>
-                  <span className="text-sm text-gray-500">({category.subcategories?.length || 0} brands)</span>
+                  {category.imageUrl ? (
+                    <img
+                      src={category.imageUrl}
+                      alt={category.name}
+                      style={{ width: 30, height: 30, objectFit: 'contain' }}
+                      className="rounded"
+                    />
+                  ) : (
+                    <span className="text-2xl">{category.icon || '📁'}</span>
+                  )}
+                  <div>
+                    <h3 className="font-bold text-lg">{category.name}</h3>
+                    <div className="text-xs text-gray-500">
+                      {category.path && <span>{category.path} • </span>}
+                      {category.subcategories?.length || 0} brands
+                    </div>
+                  </div>
                 </div>
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleDeleteCategory(category.id); }}
-                  className="text-red-600 hover:text-red-800 px-3 py-1"
-                >
-                  Delete
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={(e) => { 
+                      e.stopPropagation(); 
+                      setEditingCategoryPublic(category.id);
+                      setEditCategoryPublicFields({
+                        icon: category.icon || '📁',
+                        path: category.path || '',
+                        displayOrder: category.displayOrder || 0
+                      });
+                    }}
+                    className="text-blue-600 hover:text-blue-800 px-3 py-1 text-sm"
+                    title="Edit public appearance"
+                  >
+                    ⚙️ Edit
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDeleteCategory(category.id); }}
+                    className="text-red-600 hover:text-red-800 px-3 py-1"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
 
-              {expandedCategories[category.id] && (
+              {editingCategoryPublic === category.id && (
+                <div className="p-4 bg-blue-50 border-t border-blue-200 space-y-3">
+                  <p className="text-sm font-semibold text-blue-900">Edit Public Appearance</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Icon</label>
+                      <input
+                        type="text"
+                        maxLength="2"
+                        value={editCategoryPublicFields.icon}
+                        onChange={(e) => setEditCategoryPublicFields({...editCategoryPublicFields, icon: e.target.value})}
+                        className="w-full border rounded px-2 py-1 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Path</label>
+                      <input
+                        type="text"
+                        placeholder="/device/phones"
+                        value={editCategoryPublicFields.path}
+                        onChange={(e) => setEditCategoryPublicFields({...editCategoryPublicFields, path: e.target.value})}
+                        className="w-full border rounded px-2 py-1 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Order</label>
+                      <input
+                        type="number"
+                        value={editCategoryPublicFields.displayOrder}
+                        onChange={(e) => setEditCategoryPublicFields({...editCategoryPublicFields, displayOrder: e.target.value})}
+                        className="w-full border rounded px-2 py-1 text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-2">
+                    <label className="block text-xs font-medium mb-1">Image (optional)</label>
+                    <div className="flex items-center gap-3">
+                      {editCategoryPublicFields.imageUrl && (
+                        <img src={editCategoryPublicFields.imageUrl} alt="category" className="w-12 h-12 object-cover rounded" />
+                      )}
+                      <label className="cursor-pointer text-sm text-blue-600 hover:text-blue-800">
+                        {uploadingCategoryImage === category.id ? 'Uploading...' : 'Upload Image'}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => handleCategoryImageUploadEdit(category.id, e.target.files[0])}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <button
+                      onClick={() => {
+                        const updated = categories.map(c => 
+                          c.id === category.id 
+                            ? {
+                                ...c,
+                                icon: editCategoryPublicFields.icon,
+                                path: editCategoryPublicFields.path,
+                                displayOrder: parseInt(editCategoryPublicFields.displayOrder) || 0,
+                                isPublic: true,
+                                imageUrl: editCategoryPublicFields.imageUrl !== undefined ? editCategoryPublicFields.imageUrl : c.imageUrl
+                              }
+                            : c
+                        );
+                        onCategoriesChange(updated);
+                        setEditingCategoryPublic(null);
+                      }}
+                      className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={() => setEditingCategoryPublic(null)}
+                      className="bg-gray-300 text-gray-700 px-3 py-1 rounded text-sm hover:bg-gray-400"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {expandedCategories[category.id] && editingCategoryPublic !== category.id && (
                 <div className="p-4 space-y-4">
                   {/* Add Subcategory */}
                   <div className="flex gap-2">
@@ -388,22 +662,43 @@ export default function CategoryManager({ categories, onCategoriesChange }) {
                                     className="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-100"
                                     onClick={() => toggleModel(modelKey)}
                                   >
-                                    <div className="flex items-center gap-3">
+                                      <div className="flex items-center gap-3">
                                       <span className="text-sm">{isExpanded ? '▼' : '▶'}</span>
+                                      {(() => {
+                                        const modelObj = typeof model === 'string' ? { name: model } : model;
+                                        return modelObj.imageUrl ? (
+                                          <img src={modelObj.imageUrl} alt={modelObj.name} className="w-6 h-6 object-contain rounded" />
+                                        ) : null;
+                                      })()}
                                       <span className="font-medium text-sm">{modelName}</span>
                                       <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
                                         {modelParts.length} parts
                                       </span>
                                     </div>
-                                    <button
-                                      onClick={(e) => { 
-                                        e.stopPropagation(); 
-                                        handleDeleteModel(category.id, subcategory.id, modelName);
-                                      }}
-                                      className="text-red-600 hover:text-red-800 text-sm px-2"
-                                    >
-                                      Delete
-                                    </button>
+                                      <div className="flex items-center gap-2">
+                                        <label className="cursor-pointer text-blue-600 hover:text-blue-800 text-sm px-2">
+                                          {uploadingImage === `${category.id}-${subcategory.id}-${modelName}` ? 'Uploading...' : '📷 Upload Image'}
+                                          <input
+                                            type="file"
+                                            accept="image/*"
+                                            className="hidden"
+                                            onChange={(e) => { 
+                                              e.stopPropagation();
+                                              handleModelImageUpload(category.id, subcategory.id, modelName, e.target.files[0]);
+                                            }}
+                                            onClick={(e) => e.stopPropagation()}
+                                          />
+                                        </label>
+                                        <button
+                                          onClick={(e) => { 
+                                            e.stopPropagation(); 
+                                            handleDeleteModel(category.id, subcategory.id, modelName);
+                                          }}
+                                          className="text-red-600 hover:text-red-800 text-sm px-2"
+                                        >
+                                          Delete
+                                        </button>
+                                      </div>
                                   </div>
                                   
                                   {isExpanded && (

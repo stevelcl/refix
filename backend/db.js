@@ -234,13 +234,25 @@ async function createFeedback(item) {
 
 // ----------------- Public Categories -----------------
 async function getPublicCategories() {
-  if (useCosmos) {
-    const container = cosmosContainers['publicCategories'];
-    const { resources } = await container.items.query({ query: 'SELECT * FROM c ORDER BY c.displayOrder' }).fetchAll();
-    return resources;
+  // Derive the public-friendly list from the unified categories collection.
+  // The categories collection is now the single source of truth for public metadata.
+  try {
+    const cats = await getCategories();
+    const list = (cats || []).filter(c => c.isPublic !== false).map((c, idx) => ({
+      id: c.id || `cat-derived-${idx}`,
+      name: c.name,
+      icon: c.icon || '📁',
+      path: c.path || `/device/${(c.id || c.name || '').toString().toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+      displayOrder: c.displayOrder || idx + 1,
+      parentId: c.parentId || null,
+      imageUrl: c.imageUrl || null,
+      createdAt: c.createdAt || new Date().toISOString(),
+      updatedAt: c.updatedAt || new Date().toISOString()
+    }));
+    return list.sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+  } catch (e) {
+    return [];
   }
-  const db = await readJson();
-  return (db.publicCategories || []).sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
 }
 
 async function getPublicCategoryById(id) {
@@ -276,7 +288,8 @@ async function getPublicSubcategories(parentId) {
 async function createPublicCategory(category) {
   if (useCosmos) {
     const container = cosmosContainers['publicCategories'];
-    const { resource } = await container.items.create(category);
+    // Use upsert to make initialization idempotent and avoid 409 conflicts
+    const { resource } = await container.items.upsert(category);
     return resource;
   }
   const db = await readJson();
@@ -314,6 +327,123 @@ async function deletePublicCategory(id) {
   await writeJson(db);
 }
 
+// Migrate publicCategories into categories with public metadata
+async function migratePublicCategoriesToCategories() {
+  try {
+    const existing = await getCategories();
+    
+    if (useCosmos) {
+      const pubContainer = cosmosContainers['publicCategories'];
+      try {
+        const { resources } = await pubContainer.items.query({ query: 'SELECT * FROM c' }).fetchAll();
+        if (!resources || resources.length === 0) return; // No migration needed
+        
+        // Merge public metadata into categories
+        const migrated = existing.map(cat => {
+          const pubEntry = resources.find(p => 
+            p.name === cat.name || 
+            p.id === cat.id || 
+            (cat.id && p.id && cat.id.toLowerCase() === p.id.toLowerCase())
+          );
+          
+          if (pubEntry) {
+            return {
+              ...cat,
+              icon: pubEntry.icon || cat.icon || '📁',
+              path: pubEntry.path || cat.path,
+              displayOrder: pubEntry.displayOrder !== undefined ? pubEntry.displayOrder : (cat.displayOrder || 1),
+              isPublic: true,
+              publicMetadata: {
+                migratedFrom: pubEntry.id,
+                migratedAt: new Date().toISOString()
+              }
+            };
+          }
+          return cat;
+        });
+        
+        // Add any public categories that don't have a matching tutorial category
+        for (const pubEntry of resources) {
+          if (!migrated.find(c => c.id === pubEntry.id || c.name === pubEntry.name)) {
+            migrated.push({
+              id: pubEntry.id,
+              name: pubEntry.name,
+              icon: pubEntry.icon || '📁',
+              path: pubEntry.path || `/device/${(pubEntry.id || pubEntry.name || '').toString().toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+              displayOrder: pubEntry.displayOrder || migrated.length + 1,
+              isPublic: true,
+              subcategories: [],
+              publicMetadata: {
+                migratedFrom: pubEntry.id,
+                migratedAt: new Date().toISOString()
+              }
+            });
+          }
+        }
+        
+        await setCategories(migrated);
+        console.log('✅ Migrated public categories into categories schema');
+        return;
+      } catch (e) {
+        console.log('ℹ️  No explicit publicCategories to migrate (using fallback)');
+        return;
+      }
+    } else {
+      // JSON file fallback
+      const db = await readJson();
+      const pubCats = db.publicCategories || [];
+      if (pubCats.length === 0) return;
+      
+      const migrated = existing.map(cat => {
+        const pubEntry = pubCats.find(p => 
+          p.name === cat.name || 
+          p.id === cat.id || 
+          (cat.id && p.id && cat.id.toLowerCase() === p.id.toLowerCase())
+        );
+        
+        if (pubEntry) {
+          return {
+            ...cat,
+            icon: pubEntry.icon || cat.icon || '📁',
+            path: pubEntry.path || cat.path,
+            displayOrder: pubEntry.displayOrder !== undefined ? pubEntry.displayOrder : (cat.displayOrder || 1),
+            isPublic: true,
+            publicMetadata: {
+              migratedFrom: pubEntry.id,
+              migratedAt: new Date().toISOString()
+            }
+          };
+        }
+        return cat;
+      });
+      
+      // Add standalone public categories
+      for (const pubEntry of pubCats) {
+        if (!migrated.find(c => c.id === pubEntry.id || c.name === pubEntry.name)) {
+          migrated.push({
+            id: pubEntry.id,
+            name: pubEntry.name,
+            icon: pubEntry.icon || '📁',
+            path: pubEntry.path || `/device/${(pubEntry.id || pubEntry.name || '').toString().toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+            displayOrder: pubEntry.displayOrder || migrated.length + 1,
+            isPublic: true,
+            subcategories: [],
+            publicMetadata: {
+              migratedFrom: pubEntry.id,
+              migratedAt: new Date().toISOString()
+            }
+          });
+        }
+      }
+      
+      await setCategories(migrated);
+      console.log('✅ Migrated public categories into categories schema');
+    }
+  } catch (error) {
+    console.error('⚠️  Migration of public categories failed:', error.message);
+  }
+}
+
 module.exports = {
   init,
   // users
@@ -326,12 +456,13 @@ module.exports = {
   createTutorial,
   updateTutorial,
   deleteTutorial,
-  // categories
+  // categories (unified - now includes public metadata)
   getCategories,
   setCategories,
+  migratePublicCategoriesToCategories,
   // feedback
   createFeedback,
-  // public categories
+  // public categories (deprecated - kept for backwards compatibility)
   getPublicCategories,
   getPublicCategoryById,
   getPublicSubcategories,

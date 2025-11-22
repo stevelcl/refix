@@ -2,6 +2,31 @@
 
 A high-end, professional repair guide platform inspired by iFixit. Browse trusted guides for phones, tablets, and laptops, or use the internal CMS to add new tutorials. Built with React, Vite, Tailwind, and Azure (Cosmos DB + Blob Storage).
 
+## 🎉 Recent Updates
+
+### ✨ Category Management Unified (Nov 22, 2025)
+
+The admin dashboard category system has been merged into a **single source of truth**. 
+
+**What's new:**
+- Manage categories, brands, models, AND public appearance in one place
+- Set icon (emoji), path, and display order when creating categories
+- No more duplicate entry in two separate forms
+- Automatic migration of existing public categories
+
+**Quick Start:**
+```bash
+# Start backend - migration runs automatically
+cd backend && node server.js
+
+# Admin Dashboard → Category Management
+# Now includes: icon, path, display order fields
+```
+
+**Learn more:** See `CATEGORY_MERGE_QUICK_REF.md` for overview, or `CATEGORY_UNIFICATION_MIGRATION.md` for detailed guide.
+
+---
+
 ## Setup Instructions
 
 ### 1. Configure Environment Variables

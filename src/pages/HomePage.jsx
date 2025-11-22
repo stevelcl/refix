@@ -5,23 +5,8 @@ import { Smartphone, Laptop, Monitor } from "lucide-react";
 import heroBackground from '../assets/4fbcc306fecdeb4dcd083583022be42ce5567ffe.png';
 import { getPublicCategories } from '../azure';
 
-const FALLBACK_CATEGORIES = [
-  {
-    name: "Phone",
-    route: "/device/phone",
-    icon: <Smartphone className="w-16 h-16" />
-  },
-  {
-    name: "PC / Laptop",
-    route: "/device/laptop",
-    icon: <Laptop className="w-16 h-16" />
-  },
-  {
-    name: "Mac",
-    route: "/device/more",
-    icon: <Monitor className="w-16 h-16" />
-  }
-];
+// Note: Public categories are now fetched from the backend (unified categories).
+// Removed hardcoded fallback so UI reflects backend state (empty DB => no categories shown).
 
 const HomePage = () => {
   const navigate = useNavigate();
@@ -53,11 +38,12 @@ const HomePage = () => {
           }));
         setCategories(transformed);
       } else {
-        setCategories(FALLBACK_CATEGORIES);
+        // No categories returned from API - show empty list so UI can indicate "no devices found"
+        setCategories([]);
       }
     } catch (error) {
       console.error('Failed to fetch categories:', error);
-      setCategories(FALLBACK_CATEGORIES);
+      setCategories([]);
     } finally {
       setLoading(false);
     }
@@ -144,28 +130,36 @@ const HomePage = () => {
             </div>
           ) : (
             <>
-              <div className="grid md:grid-cols-3 gap-8 mb-6">
-                {categories.map((category) => (
-                  <div
-                    key={category.name}
-                    onClick={() => navigate(category.route)}
-                    className="bg-neutral-50 rounded-xl border border-neutral-200 p-8 flex flex-col items-center cursor-pointer hover:shadow-lg hover:border-blue-300 transition-all group relative"
-                  >
-                    <div className={`text-blue-600 mb-4 group-hover:scale-110 transition-transform ${category.iconType === 'emoji' ? '' : 'flex items-center justify-center'}`}>
-                      {category.icon}
-                    </div>
-                    <h3 className="text-xl font-semibold text-neutral-900 mb-4">{category.name}</h3>
-                    <button className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center hover:bg-blue-700 transition">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </button>
+              {categories.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-neutral-500">No devices found.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="grid md:grid-cols-3 gap-8 mb-6">
+                    {categories.map((category) => (
+                      <div
+                        key={category.name}
+                        onClick={() => navigate(category.route)}
+                        className="bg-neutral-50 rounded-xl border border-neutral-200 p-8 flex flex-col items-center cursor-pointer hover:shadow-lg hover:border-blue-300 transition-all group relative"
+                      >
+                        <div className={`text-blue-600 mb-4 group-hover:scale-110 transition-transform ${category.iconType === 'emoji' ? '' : 'flex items-center justify-center'}`}>
+                          {category.icon}
+                        </div>
+                        <h3 className="text-xl font-semibold text-neutral-900 mb-4">{category.name}</h3>
+                        <button className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center hover:bg-blue-700 transition">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-              <p className="text-sm text-neutral-500 text-center">
-                More options will be coming soon...
-              </p>
+                  <p className="text-sm text-neutral-500 text-center">
+                    More options will be coming soon...
+                  </p>
+                </>
+              )}
             </>
           )}
         </div>
