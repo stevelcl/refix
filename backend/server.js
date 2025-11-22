@@ -202,6 +202,203 @@ app.post('/api/feedback', async (req, res) => {
   }
 });
 
+// ==================== SPARE PARTS STORE ENDPOINTS ====================
+
+// GET /api/products - List all products
+app.get('/api/products', async (req, res) => {
+  try {
+    const products = await db.listProducts();
+    res.json(products);
+  } catch (error) {
+    console.error('Get products error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/products/:id - Get a single product
+app.get('/api/products/:id', async (req, res) => {
+  try {
+    const product = await db.getProduct(req.params.id);
+    if (!product) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+    res.json(product);
+  } catch (error) {
+    console.error('Get product error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/admin/products - Create a new product (admin only)
+app.post('/api/admin/products', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { name, price, description, imageUrl } = req.body;
+    
+    if (!name || price === undefined || !description) {
+      return res.status(400).json({ error: 'Name, price, and description are required' });
+    }
+    
+    const product = {
+      id: `product-${Date.now()}`,
+      name,
+      price: parseFloat(price),
+      description,
+      imageUrl: imageUrl || null,
+      createdBy: req.user.id,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    
+    const created = await db.createProduct(product);
+    res.status(201).json(created);
+  } catch (error) {
+    console.error('Create product error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/admin/products/:id - Update a product (admin only)
+app.put('/api/admin/products/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { name, price, description, imageUrl } = req.body;
+    const updates = {};
+    if (name) updates.name = name;
+    if (price !== undefined) updates.price = parseFloat(price);
+    if (description) updates.description = description;
+    if (imageUrl !== undefined) updates.imageUrl = imageUrl;
+    updates.updatedAt = new Date().toISOString();
+    
+    const updated = await db.updateProduct(req.params.id, updates);
+    if (!updated) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+    res.json(updated);
+  } catch (error) {
+    console.error('Update product error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/admin/products/:id - Delete a product (admin only)
+app.delete('/api/admin/products/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const existing = await db.getProduct(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+    
+    await db.deleteProduct(req.params.id);
+    res.status(204).send();
+  } catch (error) {
+    console.error('Delete product error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/admin/seed - Seed initial data (admin only, one-time use)
+app.post('/api/admin/seed', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const existing = await db.getCategories();
+    if (existing.length > 0) {
+      return res.status(400).json({ error: 'Database already contains data. Seeding is only for initial setup.' });
+    }
+
+    console.log('📚 Seeding initial data...');
+    
+    const phoneParts = SHARED_PARTS_LIBRARY.phones;
+    const laptopParts = SHARED_PARTS_LIBRARY.laptops;
+    const tabletParts = SHARED_PARTS_LIBRARY.tablets;
+    const otherParts = SHARED_PARTS_LIBRARY.other;
+    
+    const defaultCategories = [
+      {
+        id: 'cat-phones',
+        name: 'Phones',
+        subcategories: [
+          {
+            id: 'sub-iphone',
+            name: 'iPhone',
+            parts: [...phoneParts],
+            models: [
+              { name: 'iPhone 13', parts: [...phoneParts] },
+              { name: 'iPhone 13 Pro', parts: [...phoneParts] },
+              { name: 'iPhone 13 Pro Max', parts: [...phoneParts] },
+              { name: 'iPhone 14', parts: [...phoneParts] },
+              { name: 'iPhone 14 Pro', parts: [...phoneParts] },
+              { name: 'iPhone 14 Pro Max', parts: [...phoneParts] },
+              { name: 'iPhone 15', parts: [...phoneParts] },
+              { name: 'iPhone 15 Pro', parts: [...phoneParts] },
+              { name: 'iPhone 15 Pro Max', parts: [...phoneParts] }
+            ]
+          },
+          {
+            id: 'sub-android',
+            name: 'Android',
+            parts: [...phoneParts],
+            models: [
+              { name: 'Samsung Galaxy S22', parts: [...phoneParts] },
+              { name: 'Samsung Galaxy S23', parts: [...phoneParts] },
+              { name: 'Google Pixel 7', parts: [...phoneParts] },
+              { name: 'Google Pixel 8', parts: [...phoneParts] },
+              { name: 'OnePlus 11', parts: [...phoneParts] }
+            ]
+          }
+        ]
+      }
+    ];
+    
+    await db.setCategories(defaultCategories);
+    
+    // Also seed public categories
+    const pubCategories = [
+      {
+        id: 'pubcat-phone',
+        name: 'Phone',
+        icon: '📱',
+        path: '/device/phone',
+        displayOrder: 1,
+        parentId: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      {
+        id: 'pubcat-laptop',
+        name: 'PC / Laptop',
+        icon: '💻',
+        path: '/device/laptop',
+        displayOrder: 2,
+        parentId: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      {
+        id: 'pubcat-mac',
+        name: 'Mac',
+        icon: '🖥️',
+        path: '/device/more',
+        displayOrder: 3,
+        parentId: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ];
+    
+    for (const category of pubCategories) {
+      try {
+        await db.createPublicCategory(category);
+      } catch (err) {
+        console.warn('⚠️  Skipping public category:', category.id);
+      }
+    }
+    
+    console.log('✅ Seed data initialized successfully');
+    res.json({ message: 'Database seeded successfully with initial data' });
+  } catch (error) {
+    console.error('Seed error:', error);
+    res.status(500).json({ error: 'Failed to seed database: ' + error.message });
+  }
+});
+
 // GET /api/categories
 app.get('/api/categories', async (req, res) => {
   try {
@@ -844,8 +1041,10 @@ function getSharedPartsLibrary() {
 async function startServer() {
   await db.init();
   await initializeAdmin();
-  await initializePublicCategories();
-  await initializeTutorialCategories();
+  // DISABLED: Auto-seeding overwrites user data on server restart
+  // Seed data should only be created once via manual admin action, not on startup
+  // await initializePublicCategories();
+  // await initializeTutorialCategories();
   await db.migratePublicCategoriesToCategories();
   await migrateTutorials();
   

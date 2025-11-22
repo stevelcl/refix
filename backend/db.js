@@ -36,6 +36,7 @@ async function init() {
       await ensure('categories');
       await ensure('feedback');
       await ensure('publicCategories');
+      await ensure('products');
       cosmos = client;
       useCosmos = true;
       console.log('✅ Using Azure Cosmos DB for persistence');
@@ -53,7 +54,7 @@ async function init() {
 
   // Fallback: ensure JSON file exists
   if (!fs.existsSync(JSON_DB_FILE)) {
-    fs.writeFileSync(JSON_DB_FILE, JSON.stringify({ users: [], tutorials: [], categories: [], feedback: [], publicCategories: [] }, null, 2));
+    fs.writeFileSync(JSON_DB_FILE, JSON.stringify({ users: [], tutorials: [], categories: [], feedback: [], publicCategories: [], products: [] }, null, 2));
   }
   console.log('ℹ️  Using local JSON file for persistence:', JSON_DB_FILE);
 }
@@ -230,6 +231,72 @@ async function createFeedback(item) {
   db.feedback.push(item);
   await writeJson(db);
   return item;
+}
+
+// ----------------- Products (Spare Parts Store) -----------------
+async function listProducts() {
+  if (useCosmos) {
+    const container = cosmosContainers['products'];
+    const { resources } = await container.items.query({ query: 'SELECT * FROM c ORDER BY c.createdAt DESC' }).fetchAll();
+    return resources;
+  }
+  const db = await readJson();
+  return (db.products || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+}
+
+async function getProduct(id) {
+  if (useCosmos) {
+    const container = cosmosContainers['products'];
+    try {
+      const { resource } = await container.item(id, id).read();
+      return resource;
+    } catch (e) {
+      return null;
+    }
+  }
+  const db = await readJson();
+  return (db.products || []).find(p => p.id === id);
+}
+
+async function createProduct(product) {
+  if (useCosmos) {
+    const container = cosmosContainers['products'];
+    const { resource } = await container.items.create(product);
+    return resource;
+  }
+  const db = await readJson();
+  db.products = db.products || [];
+  db.products.push(product);
+  await writeJson(db);
+  return product;
+}
+
+async function updateProduct(id, updates) {
+  if (useCosmos) {
+    const container = cosmosContainers['products'];
+    const { resource: existing } = await container.item(id, id).read();
+    const updated = { ...existing, ...updates, id };
+    const { resource } = await container.item(id, id).replace(updated);
+    return resource;
+  }
+  const db = await readJson();
+  db.products = db.products || [];
+  const idx = db.products.findIndex(p => p.id === id);
+  if (idx === -1) return null;
+  db.products[idx] = { ...db.products[idx], ...updates, id };
+  await writeJson(db);
+  return db.products[idx];
+}
+
+async function deleteProduct(id) {
+  if (useCosmos) {
+    const container = cosmosContainers['products'];
+    await container.item(id, id).delete();
+    return;
+  }
+  const db = await readJson();
+  db.products = (db.products || []).filter(p => p.id !== id);
+  await writeJson(db);
 }
 
 // ----------------- Public Categories -----------------
@@ -469,4 +536,10 @@ module.exports = {
   createPublicCategory,
   updatePublicCategory,
   deletePublicCategory,
+  // products (spare parts store)
+  listProducts,
+  getProduct,
+  createProduct,
+  updateProduct,
+  deleteProduct,
 };

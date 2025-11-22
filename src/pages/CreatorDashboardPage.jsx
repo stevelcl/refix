@@ -4,6 +4,7 @@ import { useSite } from "../context/SiteContext";
 import CreatorDashboardForm from "../components/CreatorDashboardForm";
 import CreatorGuideTable from "../components/CreatorGuideTable";
 import CategoryManager from "../components/CategoryManager";
+import ProductManager from "../components/ProductManager";
 
 const CreatorDashboardPage = () => {
   const { isAdmin, isAuthenticated, user, login, logout, loading: authLoading } = useSite();
@@ -15,7 +16,7 @@ const CreatorDashboardPage = () => {
   const [editingGuide, setEditingGuide] = useState(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-  const [activeTab, setActiveTab] = useState("guides"); // "guides", "categories", or "public-categories"
+  const [activeTab, setActiveTab] = useState("guides"); // "guides", "categories", "products"
   const [loginLoading, setLoginLoading] = useState(false);
 
   const fetchGuides = useCallback(async () => {
@@ -215,7 +216,16 @@ const CreatorDashboardPage = () => {
             >
               Category Management
             </button>
-            {/* Public Page Categories tab removed - merged into Category Management */}
+            <button
+              onClick={() => setActiveTab("products")}
+              className={`px-6 py-3 font-semibold transition border-b-2 ${
+                activeTab === "products"
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-neutral-500 hover:text-neutral-700"
+              }`}
+            >
+              Product Management
+            </button>
         </div>
 
         {/* Message */}
@@ -269,6 +279,11 @@ const CreatorDashboardPage = () => {
             categories={categories}
             onCategoriesChange={handleCategoriesChange}
           />
+        )}
+
+        {/* Products Tab */}
+        {activeTab === "products" && (
+          <ProductManager />
         )}
 
         {/* Public Page Categories removed; public fields are managed inside Category Management */}

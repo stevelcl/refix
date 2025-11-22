@@ -21,10 +21,27 @@ export default function CategoryManager({ categories, onCategoriesChange }) {
   const [editingCategoryPublic, setEditingCategoryPublic] = useState(null);
   const [editCategoryPublicFields, setEditCategoryPublicFields] = useState({});
   const [uploadingCategoryImage, setUploadingCategoryImage] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState(null);
 
   useEffect(() => {
     fetchSharedParts();
   }, []);
+
+  const handleSaveChanges = async () => {
+    setSaving(true);
+    setSaveMessage(null);
+    try {
+      await updateCategories(categories);
+      setSaveMessage({ type: 'success', text: '✓ All changes saved successfully!' });
+      setTimeout(() => setSaveMessage(null), 3000);
+    } catch (error) {
+      console.error('Failed to save changes:', error);
+      setSaveMessage({ type: 'error', text: `✗ Failed to save changes: ${error.message}` });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const fetchSharedParts = async () => {
     try {
@@ -371,7 +388,32 @@ export default function CategoryManager({ categories, onCategoriesChange }) {
   return (
     <div className="space-y-6">
       <div className="bg-white p-6 rounded-lg shadow">
-        <h2 className="text-2xl font-bold mb-4">Category Management</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-2xl font-bold">Category Management</h2>
+          <button
+            onClick={handleSaveChanges}
+            disabled={saving}
+            className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 disabled:bg-gray-400 transition font-semibold flex items-center gap-2"
+          >
+            {saving ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                Saving...
+              </>
+            ) : (
+              <>
+                💾 Save Changes
+              </>
+            )}
+          </button>
+        </div>
+
+        {saveMessage && (
+          <div className={`mb-4 p-3 rounded ${saveMessage.type === 'success' ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-red-100 text-red-800 border border-red-300'}`}>
+            {saveMessage.text}
+          </div>
+        )}
+
         <p className="text-gray-600 mb-6">Manage repair guide categories, brands, models, and parts</p>
 
         {/* Add Category */}

@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { Search, X } from "lucide-react";
 import { Smartphone, Laptop, Monitor } from "lucide-react";
 import heroBackground from '../assets/4fbcc306fecdeb4dcd083583022be42ce5567ffe.png';
-import { getPublicCategories } from '../azure';
+import { getPublicCategories, getProducts } from '../azure';
+import { useSite } from '../context/SiteContext';
 
 // Note: Public categories are now fetched from the backend (unified categories).
 // Removed hardcoded fallback so UI reflects backend state (empty DB => no categories shown).
@@ -12,10 +13,15 @@ const HomePage = () => {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [categories, setCategories] = useState([]);
+  const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [addedProductId, setAddedProductId] = useState(null);
+  const { addToCart } = useSite();
 
   useEffect(() => {
     fetchCategories();
+    fetchProductsData();
   }, []);
 
   const fetchCategories = async () => {
@@ -49,11 +55,29 @@ const HomePage = () => {
     }
   };
 
+  const fetchProductsData = async () => {
+    try {
+      const data = await getProducts();
+      setProducts(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Failed to fetch products:', error);
+      setProducts([]);
+    } finally {
+      setProductsLoading(false);
+    }
+  };
+
   const handleSearch = (e) => {
     e.preventDefault();
     if (search.trim()) {
       navigate(`/tutorials?search=${encodeURIComponent(search)}`);
     }
+  };
+
+  const handleAddToCart = (product) => {
+    addToCart(product);
+    setAddedProductId(product.id);
+    setTimeout(() => setAddedProductId(null), 1500);
   };
 
   const clearSearch = () => {
@@ -159,6 +183,90 @@ const HomePage = () => {
                     More options will be coming soon...
                   </p>
                 </>
+              )}
+            </>
+          )}
+        </div>
+      </section>
+
+      {/* Spare Parts Store Section */}
+      <section className="max-w-7xl mx-auto px-6 py-16 border-t border-neutral-200">
+        <div className="mb-12">
+          <h2 className="text-3xl font-bold text-neutral-900 mb-4">Spare Parts Store</h2>
+          <p className="text-neutral-600 mb-8">Shop genuine replacement parts for your devices</p>
+          
+          {productsLoading ? (
+            <div className="text-center py-12">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <p className="text-neutral-500 mt-3">Loading products...</p>
+            </div>
+          ) : products.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-neutral-500 mb-4">No products available at this time</p>
+              <button
+                onClick={() => navigate('/shop')}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+              >
+                View Shop
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 mb-8">
+                {products.slice(0, 8).map((product) => (
+                  <div
+                    key={product.id}
+                    className="bg-white rounded-lg shadow-md border border-neutral-200 overflow-hidden hover:shadow-lg transition-all"
+                  >
+                    {/* Product Image */}
+                    <div className="w-full h-40 bg-gradient-to-br from-neutral-100 to-neutral-200 flex items-center justify-center overflow-hidden">
+                      {product.imageUrl ? (
+                        <img
+                          src={product.imageUrl}
+                          alt={product.name}
+                          className="w-full h-full object-cover hover:scale-105 transition-transform"
+                        />
+                      ) : (
+                        <span className="text-3xl">📦</span>
+                      )}
+                    </div>
+
+                    {/* Product Details */}
+                    <div className="p-4">
+                      <h3 className="text-base font-semibold text-neutral-900 mb-1 line-clamp-2">
+                        {product.name}
+                      </h3>
+                      <p className="text-neutral-600 text-xs mb-3 line-clamp-2">
+                        {product.description}
+                      </p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xl font-bold text-blue-600">
+                          RM {product.price.toFixed(2)}
+                        </span>
+                        <button
+                          onClick={() => handleAddToCart(product)}
+                          className={`px-3 py-1 rounded text-xs transition font-medium ${
+                            addedProductId === product.id
+                              ? 'bg-green-600 text-white'
+                              : 'bg-blue-600 text-white hover:bg-blue-700'
+                          }`}
+                        >
+                          {addedProductId === product.id ? '✓' : 'Add'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {products.length > 8 && (
+                <div className="text-center">
+                  <button
+                    onClick={() => navigate('/shop')}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                  >
+                    View All Products
+                  </button>
+                </div>
               )}
             </>
           )}

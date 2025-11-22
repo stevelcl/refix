@@ -287,3 +287,38 @@ export async function deletePublicCategory(id) {
     method: "DELETE",
   });
 }
+
+// --- Product APIs (Spare Parts Store) ---
+
+// Public: Get all products
+export async function getProducts() {
+  return api(`/products`);
+}
+
+// Public: Get a single product
+export async function getProduct(id) {
+  return api(`/products/${encodeURIComponent(id)}`);
+}
+
+// Admin: Create a product
+export async function createProduct(data) {
+  return api(`/admin/products`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+// Admin: Update a product
+export async function updateProduct(id, data) {
+  return api(`/admin/products/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+// Admin: Delete a product
+export async function deleteProduct(id) {
+  return api(`/admin/products/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}

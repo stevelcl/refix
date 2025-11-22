@@ -16,6 +16,7 @@ import LaptopBrandPage from "./pages/LaptopBrandPage";
 import MoreDevicesPage from "./pages/MoreDevicesPage";
 import BrandModelsPage from "./pages/BrandModelsPage";
 import PartTutorialsPage from "./pages/PartTutorialsPage";
+import ShopPage from "./pages/ShopPage";
 
 const App = () => (
   <div className="bg-[#f9fafe] min-h-screen flex flex-col">
@@ -35,6 +36,9 @@ const App = () => (
         <Route path="/device/phone/android" element={<AndroidPhonePage />} />
         <Route path="/device/laptop" element={<LaptopRepairPage />} />
         <Route path="/device/more" element={<MoreDevicesPage />} />
+        
+        {/* Shop / Spare Parts Store */}
+        <Route path="/shop" element={<ShopPage />} />
         
         {/* Tutorial Routes */}
         <Route path="/tutorials" element={<TutorialsPage />} />
