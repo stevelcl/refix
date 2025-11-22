@@ -8,6 +8,7 @@ export default function CategoryManager({ categories, onCategoriesChange }) {
   const [newSubcategoryName, setNewSubcategoryName] = useState({});
   const [newModelName, setNewModelName] = useState({});
   const [newPartName, setNewPartName] = useState({});
+  const [expandedModels, setExpandedModels] = useState({});
   const [sharedParts, setSharedParts] = useState([]);
   const [editingSubcategory, setEditingSubcategory] = useState(null);
   const [uploadingImage, setUploadingImage] = useState(null);
@@ -71,8 +72,9 @@ export default function CategoryManager({ categories, onCategoriesChange }) {
     }
   };
 
-  const handleAddPart = (categoryId, subcategoryId) => {
-    const partName = newPartName[`${categoryId}-${subcategoryId}`]?.trim();
+  // Add part to a specific model
+  const handleAddPartToModel = (categoryId, subcategoryId, modelName) => {
+    const partName = newPartName[`${categoryId}-${subcategoryId}-${modelName}`]?.trim();
     if (!partName) return;
 
     const updatedCategories = categories.map(cat => {
@@ -81,12 +83,22 @@ export default function CategoryManager({ categories, onCategoriesChange }) {
           ...cat,
           subcategories: cat.subcategories.map(sub => {
             if (sub.id === subcategoryId) {
-              const existingParts = sub.parts || [];
-              if (existingParts.includes(partName)) {
-                alert('This part already exists');
-                return sub;
-              }
-              return { ...sub, parts: [...existingParts, partName] };
+              return {
+                ...sub,
+                models: (sub.models || []).map(model => {
+                  const currentModelName = typeof model === 'string' ? model : model.name;
+                  if (currentModelName === modelName) {
+                    const modelObj = typeof model === 'string' ? { name: model, parts: [] } : model;
+                    const existingParts = modelObj.parts || [];
+                    if (existingParts.includes(partName)) {
+                      alert('This part already exists for this model');
+                      return model;
+                    }
+                    return { ...modelObj, parts: [...existingParts, partName] };
+                  }
+                  return model;
+                })
+              };
             }
             return sub;
           })
@@ -96,11 +108,12 @@ export default function CategoryManager({ categories, onCategoriesChange }) {
     });
 
     onCategoriesChange(updatedCategories);
-    setNewPartName({ ...newPartName, [`${categoryId}-${subcategoryId}`]: '' });
+    setNewPartName({ ...newPartName, [`${categoryId}-${subcategoryId}-${modelName}`]: '' });
   };
 
-  const handleRemovePart = (categoryId, subcategoryId, partToRemove) => {
-    if (!confirm(`Remove part "${partToRemove}"? This will affect all models in this subcategory.`)) {
+  // Remove part from a specific model
+  const handleRemovePartFromModel = (categoryId, subcategoryId, modelName, partToRemove) => {
+    if (!confirm(`Remove part "${partToRemove}" from model "${modelName}"?`)) {
       return;
     }
 
@@ -112,11 +125,17 @@ export default function CategoryManager({ categories, onCategoriesChange }) {
             if (sub.id === subcategoryId) {
               return {
                 ...sub,
-                parts: (sub.parts || []).filter(p => p !== partToRemove),
-                models: (sub.models || []).map(model => ({
-                  ...model,
-                  parts: (model.parts || []).filter(p => p !== partToRemove)
-                }))
+                models: (sub.models || []).map(model => {
+                  const currentModelName = typeof model === 'string' ? model : model.name;
+                  if (currentModelName === modelName) {
+                    const modelObj = typeof model === 'string' ? { name: model, parts: [] } : model;
+                    return {
+                      ...modelObj,
+                      parts: (modelObj.parts || []).filter(p => p !== partToRemove)
+                    };
+                  }
+                  return model;
+                })
               };
             }
             return sub;
@@ -127,6 +146,10 @@ export default function CategoryManager({ categories, onCategoriesChange }) {
     });
 
     onCategoriesChange(updatedCategories);
+  };
+
+  const toggleModel = (modelKey) => {
+    setExpandedModels(prev => ({ ...prev, [modelKey]: !prev[modelKey] }));
   };
 
   const handleAddCategory = () => {
@@ -150,7 +173,6 @@ export default function CategoryManager({ categories, onCategoriesChange }) {
           id: name.toLowerCase().replace(/\s+/g, '-'),
           name,
           models: [],
-          parts: [],
           imageUrl: null
         };
         return { ...cat, subcategories: [...cat.subcategories, newSub] };
@@ -172,8 +194,8 @@ export default function CategoryManager({ categories, onCategoriesChange }) {
           ...cat,
           subcategories: cat.subcategories.map(sub => {
             if (sub.id === subcategoryId) {
-              const subcategoryParts = sub.parts || [];
-              const newModel = { name: modelName, parts: [...subcategoryParts] };
+              // Create new model with empty parts array (parts are model-specific)
+              const newModel = { name: modelName, parts: [] };
               return { ...sub, models: [...(sub.models || []), newModel] };
             }
             return sub;
@@ -308,9 +330,6 @@ export default function CategoryManager({ categories, onCategoriesChange }) {
                             <img src={subcategory.imageUrl} alt={subcategory.name} className="w-8 h-8 object-cover rounded" />
                           )}
                           <span className="font-semibold">{subcategory.name}</span>
-                          <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
-                            {subcategory.parts?.length || 0} parts
-                          </span>
                           <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">
                             {subcategory.models?.length || 0} models
                           </span>
@@ -337,53 +356,6 @@ export default function CategoryManager({ categories, onCategoriesChange }) {
 
                       {expandedSubcategories[subcategory.id] && (
                         <div className="p-3 space-y-4">
-                          {/* Parts Section */}
-                          <div className="bg-purple-50 p-3 rounded">
-                            <div className="flex items-center gap-2 mb-3">
-                              <span className="text-purple-700 font-semibold">🏷️ Parts for {subcategory.name}</span>
-                            </div>
-                            
-                            <div className="flex gap-2 mb-3">
-                              <input
-                                type="text"
-                                list={`parts-${category.id}-${subcategory.id}`}
-                                placeholder="Add part (e.g., Screen, Battery)..."
-                                value={newPartName[`${category.id}-${subcategory.id}`] || ''}
-                                onChange={(e) => setNewPartName({ ...newPartName, [`${category.id}-${subcategory.id}`]: e.target.value })}
-                                onKeyPress={(e) => e.key === 'Enter' && handleAddPart(category.id, subcategory.id)}
-                                className="flex-1 border rounded px-3 py-2 text-sm"
-                              />
-                              <datalist id={`parts-${category.id}-${subcategory.id}`}>
-                                {sharedParts.map(part => (
-                                  <option key={part} value={part} />
-                                ))}
-                              </datalist>
-                              <button
-                                onClick={() => handleAddPart(category.id, subcategory.id)}
-                                className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 text-sm"
-                              >
-                                Add Part
-                              </button>
-                            </div>
-
-                            <div className="flex flex-wrap gap-2">
-                              {(subcategory.parts || []).map(part => (
-                                <span key={part} className="inline-flex items-center gap-1 bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm">
-                                  🏷️ {part}
-                                  <button
-                                    onClick={() => handleRemovePart(category.id, subcategory.id, part)}
-                                    className="text-purple-900 hover:text-purple-700 ml-1"
-                                  >
-                                    ×
-                                  </button>
-                                </span>
-                              ))}
-                              {(!subcategory.parts || subcategory.parts.length === 0) && (
-                                <span className="text-gray-500 text-sm italic">No parts yet</span>
-                              )}
-                            </div>
-                          </div>
-
                           {/* Add Model */}
                           <div className="flex gap-2">
                             <input
@@ -403,23 +375,97 @@ export default function CategoryManager({ categories, onCategoriesChange }) {
                           </div>
 
                           {/* Models List */}
-                          <div className="space-y-2">
-                            {subcategory.models?.map((model, idx) => (
-                              <div key={idx} className="flex items-center justify-between bg-gray-50 p-2 rounded">
-                                <div>
-                                  <span className="font-medium text-sm">{model.name}</span>
-                                  <span className="text-xs text-purple-600 ml-2">
-                                    ({model.parts?.length || 0} parts)
-                                  </span>
+                          <div className="space-y-3">
+                            {subcategory.models?.map((model, idx) => {
+                              const modelName = typeof model === 'string' ? model : model.name;
+                              const modelParts = typeof model === 'object' && model.parts ? model.parts : [];
+                              const modelKey = `${category.id}-${subcategory.id}-${modelName}`;
+                              const isExpanded = expandedModels[modelKey];
+                              
+                              return (
+                                <div key={idx} className="border rounded-lg bg-gray-50">
+                                  <div 
+                                    className="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-100"
+                                    onClick={() => toggleModel(modelKey)}
+                                  >
+                                    <div className="flex items-center gap-3">
+                                      <span className="text-sm">{isExpanded ? '▼' : '▶'}</span>
+                                      <span className="font-medium text-sm">{modelName}</span>
+                                      <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
+                                        {modelParts.length} parts
+                                      </span>
+                                    </div>
+                                    <button
+                                      onClick={(e) => { 
+                                        e.stopPropagation(); 
+                                        handleDeleteModel(category.id, subcategory.id, modelName);
+                                      }}
+                                      className="text-red-600 hover:text-red-800 text-sm px-2"
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
+                                  
+                                  {isExpanded && (
+                                    <div className="p-3 bg-white border-t">
+                                      {/* Parts Management for this Model */}
+                                      <div className="bg-purple-50 p-3 rounded mb-3">
+                                        <div className="flex items-center gap-2 mb-3">
+                                          <span className="text-purple-700 font-semibold text-sm">🏷️ Parts for {modelName}</span>
+                                        </div>
+                                        
+                                        <div className="flex gap-2 mb-3">
+                                          <input
+                                            type="text"
+                                            list={`parts-${modelKey}`}
+                                            placeholder="Add part (e.g., Screen, Battery)..."
+                                            value={newPartName[modelKey] || ''}
+                                            onChange={(e) => setNewPartName({ ...newPartName, [modelKey]: e.target.value })}
+                                            onKeyPress={(e) => e.key === 'Enter' && handleAddPartToModel(category.id, subcategory.id, modelName)}
+                                            className="flex-1 border rounded px-3 py-2 text-sm"
+                                            onClick={(e) => e.stopPropagation()}
+                                          />
+                                          <datalist id={`parts-${modelKey}`}>
+                                            {sharedParts.map(part => (
+                                              <option key={part} value={part} />
+                                            ))}
+                                          </datalist>
+                                          <button
+                                            onClick={(e) => { 
+                                              e.stopPropagation();
+                                              handleAddPartToModel(category.id, subcategory.id, modelName);
+                                            }}
+                                            className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 text-sm"
+                                          >
+                                            Add Part
+                                          </button>
+                                        </div>
+
+                                        <div className="flex flex-wrap gap-2">
+                                          {modelParts.map((part, partIdx) => (
+                                            <span key={partIdx} className="inline-flex items-center gap-1 bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm">
+                                              🏷️ {part}
+                                              <button
+                                                onClick={(e) => { 
+                                                  e.stopPropagation();
+                                                  handleRemovePartFromModel(category.id, subcategory.id, modelName, part);
+                                                }}
+                                                className="text-purple-900 hover:text-purple-700 ml-1"
+                                              >
+                                                ×
+                                              </button>
+                                            </span>
+                                          ))}
+                                          {modelParts.length === 0 && (
+                                            <span className="text-gray-500 text-sm italic">No parts yet for this model</span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
-                                <button
-                                  onClick={() => handleDeleteModel(category.id, subcategory.id, model.name)}
-                                  className="text-red-600 hover:text-red-800 text-sm px-2"
-                                >
-                                  Delete
-                                </button>
-                              </div>
-                            ))}
+                              );
+                            })}
                             {(!subcategory.models || subcategory.models.length === 0) && (
                               <p className="text-gray-500 text-sm italic">No models yet</p>
                             )}

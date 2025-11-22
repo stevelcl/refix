@@ -288,8 +288,8 @@ app.get('/api/categories/:categoryName/brands/:brandName/models/:modelName/parts
       return res.status(404).json({ error: 'Model not found' });
     }
     
-    // Return parts array from model or fallback to brand parts
-    const parts = typeof model === 'object' && model.parts ? model.parts : brand.parts || [];
+    // Return parts array from model only (parts are model-specific, not brand-level)
+    const parts = typeof model === 'object' && model.parts ? model.parts : [];
     res.json(parts);
   } catch (error) {
     console.error('Get parts error:', error);

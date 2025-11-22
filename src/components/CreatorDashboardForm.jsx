@@ -59,7 +59,8 @@ const CreatorDashboardForm = ({ initialValues, onSubmit, editing, loading, categ
       const selectedBrand = availableBrands.find(b => b.name === form.brand);
       if (selectedBrand && selectedBrand.models) {
         setAvailableModels(selectedBrand.models);
-        setAvailableParts(selectedBrand.parts || []);
+        // Don't set parts from brand - parts are model-specific
+        setAvailableParts([]);
         // Reset downstream selections if brand changes
         if (!editing || !initialValues?.model) {
           setForm(f => ({ ...f, model: "", part: "", relatedParts: [] }));

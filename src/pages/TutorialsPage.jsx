@@ -83,7 +83,8 @@ const TutorialsPage = () => {
       const brand = availableBrands.find(b => b.name === selectedBrand);
       if (brand && brand.models) {
         setAvailableModels(brand.models);
-        setAvailableParts(brand.parts || []);
+        // Don't set parts from brand - parts are model-specific
+        setAvailableParts([]);
       } else {
         setAvailableModels([]);
         setAvailableParts([]);
